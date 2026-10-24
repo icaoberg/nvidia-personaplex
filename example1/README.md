@@ -37,9 +37,23 @@ conda env create -f environment.yml
 conda activate personaplex
 ```
 
-```bash
-export HF_TOKEN=<YOUR_HUGGINGFACE_TOKEN>
-```
+The model is gated on Hugging Face, so give it your account once:
+
+1. Sign in at [huggingface.co](https://huggingface.co) and accept the license at [huggingface.co/nvidia/personaplex-7b-v1](https://huggingface.co/nvidia/personaplex-7b-v1).
+2. Create a **read** token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+3. Log in. This saves the token, so later shells don't need `HF_TOKEN`:
+
+   ```bash
+   huggingface-cli login
+   ```
+
+   Or set it for the current shell only:
+
+   ```bash
+   export HF_TOKEN=<YOUR_HUGGINGFACE_TOKEN>
+   ```
+
+The script checks access before running the model. If the license isn't accepted or you aren't logged in, it stops with these steps instead of a `GatedRepoError` traceback.
 
 ## Writing prompts
 
@@ -113,7 +127,8 @@ open example1/output/conversation.wav
 ## What to expect on an M4
 
 - **It's slow.** The official code is built for NVIDIA GPUs, and the Mac runs it on the CPU. Processing takes much longer than the length of `input.wav`. This is offline batch processing, not a live conversation.
-- **The first run downloads the model** from Hugging Face. Later runs use the cache.
+- **The first run downloads the model** from Hugging Face, about 17 GB. Later runs use the cache.
+- **Voice prompts are copied for the CPU.** The published voice files (`NATF2.pt` and the rest) were saved from an NVIDIA GPU. Upstream loads them without moving them to the CPU, which crashes on a Mac with `Attempting to deserialize object on a CUDA device`. The script saves a CPU copy of your voice in `output/voices/` and passes it to `moshi.offline` with `--voice-prompt-dir`. The submodule is untouched.
 - **The Apple GPU (`--device mps`) is experimental.** Upstream turned automatic MPS support off. It may fail with unsupported-operation errors, or run no faster than the CPU. If it errors, go back to the default CPU.
 - **Shorter is faster.** Fewer turns and shorter `pause:` values mean less audio to process.
 - **For live conversation, use an NVIDIA GPU.** See [PSC Bridges-2 GPUs](../README.md#psc-bridges-2-gpus).

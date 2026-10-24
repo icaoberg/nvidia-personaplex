@@ -254,6 +254,7 @@ ssh -L 8998:<compute-node>:8998 <user>@bridges2.psc.edu
 
 - The upstream code is CUDA-first. Both `moshi.server` and `moshi.offline` default to `--device cuda`, so on a Mac you must pass `--device cpu`. The server's automatic MPS detection is commented out in the code.
 - PyTorch 2.4.1 from [`environment.yml`](environment.yml) does detect MPS on an M4 Max (checked on macOS 15.6.1), and the model loader has an MPS code path. You can try `--device mps`, but expect unsupported-op errors or poor performance. Nobody upstream has tested it.
+- **Voice prompts crash on the CPU as published.** The `.pt` voice files were saved from a CUDA GPU, and upstream's `torch.load` has no `map_location`, so `--device cpu` fails with `Attempting to deserialize object on a CUDA device`. Load each voice with `map_location="cpu"`, save it again, and pass that folder with `--voice-prompt-dir`. [example1](example1) does this for you.
 - **Memory:** Apple Silicon shares one pool of RAM between the CPU and GPU. M4 MacBook Pros ship with 16–128 GB depending on the chip. A 16 GB model can't comfortably hold the ~15 GB of weights plus macOS. **24 GB is a practical minimum, and 36–48 GB+ (M4 Pro / M4 Max) is better.**
 - **Bottom line:** fine for trying offline WAV inference on the CPU. For live, full-duplex conversation, use an NVIDIA GPU, such as a Bridges-2 node. A community Swift port for Apple Silicon has been [described](https://mewayz.com/en/blog/nvidia-personaplex-7b-on-apple-silicon-full-duplex-speech-to-speech-in-swift), but it's unverified and not from NVIDIA.
 

@@ -31,6 +31,7 @@ from pathlib import Path
 import numpy as np
 import sphn
 
+MODEL_REPO = "nvidia/personaplex-7b-v1"  # gated: license must be accepted
 SAMPLE_RATE = 24000  # PersonaPlex (Mimi) sample rate
 LEAD_IN_SECONDS = 1.0  # silence before the first user turn
 MIN_MEMORY_GB = 24  # ~15 GB of BF16 weights plus macOS and the audio codec
@@ -60,6 +61,55 @@ def check_mac():
         print(f"Warning: {memory_gb:.0f} GB of memory is below the ~{MIN_MEMORY_GB} GB "
               "PersonaPlex needs; expect heavy swapping or an out-of-memory failure.",
               file=sys.stderr)
+
+
+def check_model_access():
+    """Fail early, with instructions, if the gated model can't be downloaded."""
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.utils import GatedRepoError
+
+    try:
+        hf_hub_download(MODEL_REPO, "config.json")  # small file
+    except GatedRepoError:
+        sys.exit(
+            f"\nCan't download {MODEL_REPO}: Hugging Face access was denied.\n"
+            f"  1. Sign in at https://huggingface.co and accept the license at\n"
+            f"     https://huggingface.co/{MODEL_REPO}\n"
+            f"  2. Create a read token at https://huggingface.co/settings/tokens\n"
+            f"  3. Run `huggingface-cli login` (or `export HF_TOKEN=<token>`)\n"
+            f"Then run this script again. input.wav is already built."
+        )
+
+
+def cpu_voice_prompt_dir(voice: str, out_dir: Path) -> Path:
+    """Save a CPU copy of the voice prompt and return the folder holding it.
+
+    The published voice files were saved from a CUDA GPU, and moshi loads them
+    with torch.load(path) and no map_location, which fails on a Mac with
+    "Attempting to deserialize object on a CUDA device". A copy saved from the
+    CPU loads anywhere, without patching the upstream submodule.
+    """
+    import tarfile
+
+    import torch
+    from huggingface_hub import hf_hub_download
+
+    voices_tgz = Path(hf_hub_download(MODEL_REPO, "voices.tgz"))
+    src_dir = voices_tgz.parent / "voices"
+    if not src_dir.exists():
+        with tarfile.open(voices_tgz) as tar:
+            tar.extractall(voices_tgz.parent, filter="data")
+
+    src = src_dir / f"{voice}.pt"
+    if not src.exists():
+        names = ", ".join(sorted(p.stem for p in src_dir.glob("*.pt")))
+        sys.exit(f"Unknown voice {voice!r}. Available: {names}")
+
+    dst_dir = out_dir / "voices"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    state = torch.load(src, map_location="cpu", weights_only=True)
+    torch.save(state, dst_dir / src.name)
+    return dst_dir
 
 
 def parse_prompts(path: Path) -> dict:
@@ -141,6 +191,7 @@ def run_personaplex(args, prompts: dict, input_wav: Path, agent_wav: Path, agent
     cmd = [
         sys.executable, "-m", "moshi.offline",
         "--voice-prompt", f"{prompts['voice']}.pt",
+        "--voice-prompt-dir", str(cpu_voice_prompt_dir(prompts["voice"], args.out_dir)),
         "--input-wav", str(input_wav),
         "--output-wav", str(agent_wav),
         "--output-text", str(agent_json),
@@ -154,7 +205,10 @@ def run_personaplex(args, prompts: dict, input_wav: Path, agent_wav: Path, agent
         # Run ops that MPS doesn't implement on the CPU instead of failing.
         env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     print(f"Running moshi.offline on {args.device}. On a Mac this takes a while.")
-    subprocess.run(cmd, check=True, env=env)
+    try:
+        subprocess.run(cmd, check=True, env=env)
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"moshi.offline failed (exit code {e.returncode}); see the error above.")
 
 
 def write_transcript(agent_json: Path, transcript: Path) -> str:
@@ -206,10 +260,7 @@ def main():
 
     if args.input_only:
         return
-    if not os.environ.get("HF_TOKEN"):
-        print("Warning: HF_TOKEN is not set; the model download will fail "
-              "unless you ran `huggingface-cli login`.", file=sys.stderr)
-
+    check_model_access()
     run_personaplex(args, prompts, input_wav, agent_wav, agent_json)
     text = write_transcript(agent_json, args.out_dir / "transcript.txt")
     write_conversation(user, agent_wav, args.out_dir / "conversation.wav")
