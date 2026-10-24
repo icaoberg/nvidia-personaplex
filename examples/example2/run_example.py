@@ -13,7 +13,7 @@ way moshi.server does for each connection:
   3. The speech from each turn is cut out and joined one voice at a time,
      with a short gap between voices, so they never overlap.
 
-Outputs (in example2/output/ by default):
+Outputs (in examples/example2/output/ by default):
 
   conversation.wav   the whole conversation, one voice at a time
   transcript.txt     who said what, from the model's text stream
@@ -21,12 +21,12 @@ Outputs (in example2/output/ by default):
   config.json        the prompts and settings used for this run
   voices/            CPU copies of the two voice prompts
 
-Run it inside the `personaplex` conda environment (see ../environment.yml),
+Run it inside the `personaplex` conda environment (see ../../environment.yml),
 logged in to Hugging Face with the model license accepted:
 
-  python example2/run_example.py
-  python example2/run_example.py --gap 1          # longer silence between voices
-  python example2/run_example.py --device mps     # Apple GPU (slow; see README)
+  python examples/example2/run_example.py
+  python examples/example2/run_example.py --gap 1          # longer silence between voices
+  python examples/example2/run_example.py --device mps     # Apple GPU (slow; see README)
 """
 
 import argparse
@@ -402,9 +402,9 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("prompts", nargs="?", default=HERE / "prompts.txt", type=Path,
-                        help="Prompts file (default: example2/prompts.txt)")
+                        help="Prompts file (default: examples/example2/prompts.txt)")
     parser.add_argument("--out-dir", default=HERE / "output", type=Path,
-                        help="Where to write results (default: example2/output)")
+                        help="Where to write results (default: examples/example2/output)")
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps"],
                         help="cpu (default) or mps, the Apple GPU (untested upstream)")
     parser.add_argument("--seed", type=int, default=42424242)

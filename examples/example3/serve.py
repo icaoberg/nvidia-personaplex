@@ -12,11 +12,11 @@ This wrapper adds:
   - prints the persona to paste into the page, and copies it: a chef and
     cooking teacher by default, or a SenNet or HuBMAP data guide
 
-Run it inside the `personaplex-mlx` conda environment (see ../environment-mlx.yml):
+Run it inside the `personaplex-mlx` conda environment (see ../../environment-mlx.yml):
 
-  python example3/serve.py                      # chef persona, 4-bit
-  python example3/serve.py --persona sennet     # or hubmap
-  python example3/serve.py --quant 8            # higher quality, slower
+  python examples/example3/serve.py                      # chef persona, 4-bit
+  python examples/example3/serve.py --persona sennet     # or hubmap
+  python examples/example3/serve.py --quant 8            # higher quality, slower
 """
 
 import argparse

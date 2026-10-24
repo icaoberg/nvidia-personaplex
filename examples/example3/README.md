@@ -2,11 +2,11 @@
 
 Open a page, allow the microphone, and talk to PersonaPlex while it talks back, full duplex, **entirely on your Mac**. There are two roles: **you're the student**, and the model plays **Chef Marco, a cooking teacher**. Data-guide personas for [SenNet](https://sennetconsortium.org/) and [HuBMAP](https://portal.hubmapconsortium.org/) are also included.
 
-NVIDIA's own PyTorch code is too slow for live conversation on Apple Silicon (details below). This example instead runs [personaplex-mlx](https://github.com/mu-hashmi/personaplex-mlx), a **community MLX port** of PersonaPlex, included as the [`personaplex-mlx`](../personaplex-mlx) submodule. It quantizes NVIDIA's official weights to 4-bit and serves NVIDIA's own PersonaPlex web page.
+NVIDIA's own PyTorch code is too slow for live conversation on Apple Silicon (details below). This example instead runs [personaplex-mlx](https://github.com/mu-hashmi/personaplex-mlx), a **community MLX port** of PersonaPlex, included as the [`personaplex-mlx`](../../personaplex-mlx) submodule. It quantizes NVIDIA's official weights to 4-bit and serves NVIDIA's own PersonaPlex web page.
 
 ```
 browser (mic + speakers) ──WebSocket──► personaplex_mlx.local_web ──► PersonaPlex (MLX, 4-bit, Apple GPU)
-   http://localhost:8998                   (started by example3/serve.py)
+   http://localhost:8998                   (started by examples/example3/serve.py)
 ```
 
 ## Files
@@ -17,7 +17,7 @@ browser (mic + speakers) ──WebSocket──► personaplex_mlx.local_web ─�
 | [`personas/chef.txt`](personas/chef.txt) | Default persona: Chef Marco, a patient cooking teacher (851 characters; the page allows 1,000) |
 | [`personas/sennet.txt`](personas/sennet.txt) | SenNet data guide persona (833 characters) |
 | [`personas/hubmap.txt`](personas/hubmap.txt) | HuBMAP data guide persona (852 characters) |
-| [`../environment-mlx.yml`](../environment-mlx.yml) | The separate `personaplex-mlx` conda environment |
+| [`../../environment-mlx.yml`](../../environment-mlx.yml) | The separate `personaplex-mlx` conda environment |
 
 ## Requirements
 
@@ -51,7 +51,7 @@ conda activate personaplex-mlx
 ```
 
 ```bash
-python example3/serve.py
+python examples/example3/serve.py
 ```
 
 `serve.py` prints the chef persona, copies it to the clipboard, loads the model and opens [http://localhost:8998](http://localhost:8998) in your browser. Then:

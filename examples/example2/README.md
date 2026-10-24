@@ -56,7 +56,7 @@ The same as [example1](../example1/README.md#requirements):
 - The `personaplex` conda environment
 - A Hugging Face login with the model license accepted
 
-The script checks the login before loading the model, and copies the voice prompts for the CPU (see [why](../README.md#apple-macbook-pro-m4)).
+The script checks the login before loading the model, and copies the voice prompts for the CPU (see [why](../../README.md#apple-macbook-pro-m4)).
 
 ## Writing prompts
 
@@ -79,7 +79,7 @@ conda activate personaplex
 ```
 
 ```bash
-python example2/run_example.py
+python examples/example2/run_example.py
 ```
 
 | Option | Effect |
@@ -88,11 +88,11 @@ python example2/run_example.py
 | `--gap SECONDS` | Silence between voices (default `0.5`) |
 | `--seed N` | Random seed (default `42424242`). Change it for different answers. |
 | `--device mps` | Try the Apple GPU (untested upstream) |
-| `--out-dir DIR` | Output folder (default `example2/output`) |
+| `--out-dir DIR` | Output folder (default `examples/example2/output`) |
 
 ## Output
 
-Everything goes to `example2/output/`, which git ignores:
+Everything goes to `examples/example2/output/`, which git ignores:
 
 | File | Contents |
 |---|---|
@@ -105,7 +105,7 @@ Everything goes to `example2/output/`, which git ignores:
 Listen with:
 
 ```bash
-open example2/output/conversation.wav
+open examples/example2/output/conversation.wav
 ```
 
 ## What to expect

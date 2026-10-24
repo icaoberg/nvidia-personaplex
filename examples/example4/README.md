@@ -66,13 +66,13 @@ conda activate personaplex-mlx
 See which cards a topic retrieves, without starting anything:
 
 ```bash
-python example4/serve.py --topic "pasta with tomato sauce" --dry-run
+python examples/example4/serve.py --topic "pasta with tomato sauce" --dry-run
 ```
 
 Talk to the chef:
 
 ```bash
-python example4/serve.py --topic "pasta with tomato sauce"
+python examples/example4/serve.py --topic "pasta with tomato sauce"
 ```
 
 In the page that opens: paste the persona into **Text Prompt** (⌘V), pick **Voice** `NATURAL_M0`, click **Connect**, and allow the microphone. Use headphones.

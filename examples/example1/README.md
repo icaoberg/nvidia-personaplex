@@ -18,7 +18,7 @@ prompts.txt ──► macOS say ──► input.wav ──► moshi.offline (CPU
 - **A MacBook Pro M4** (M4, M4 Pro or M4 Max) on macOS. The script stops on anything other than macOS on Apple Silicon, and warns, but continues, on non-M4 chips.
 - **24 GB of unified memory or more.** The BF16 weights alone are ~15 GB. On a 16 GB Mac the script warns that it will likely swap heavily or run out of memory. 36–48 GB is comfortable.
 - **About 20 GB of free disk space** for the model download, in the Hugging Face cache (`~/.cache/huggingface`).
-- **The `personaplex` conda environment** from [`../environment.yml`](../environment.yml). It includes `libopus`, so there's no need for `brew install opus`.
+- **The `personaplex` conda environment** from [`../../environment.yml`](../../environment.yml). It includes `libopus`, so there's no need for `brew install opus`.
 - **`HF_TOKEN`** exported, with the [model license](https://huggingface.co/nvidia/personaplex-7b-v1) accepted.
 
 ## Setup
@@ -82,17 +82,17 @@ user: That sounds great. Where did you learn to make it?
 Check your prompts first. This only builds `input.wav`, takes seconds, and needs no model:
 
 ```bash
-python example1/run_example.py --input-only
+python examples/example1/run_example.py --input-only
 ```
 
 ```bash
-open example1/output/input.wav
+open examples/example1/output/input.wav
 ```
 
 Then run the model on the CPU:
 
 ```bash
-python example1/run_example.py
+python examples/example1/run_example.py
 ```
 
 Options:
@@ -106,11 +106,11 @@ Options:
 | `--input-only` | Only build `input.wav`, without running the model |
 | `--mix-only` | Remake `conversation.wav` and `conversation_live.wav` from an existing `agent.wav`, without rerunning the model. Use it to try a different `--gap`. |
 | `--seed N` | Random seed (default `42424242`) |
-| `--out-dir DIR` | Output folder (default `example1/output`) |
+| `--out-dir DIR` | Output folder (default `examples/example1/output`) |
 
 ## Output
 
-Everything goes to `example1/output/`, which git ignores:
+Everything goes to `examples/example1/output/`, which git ignores:
 
 | File | Contents |
 |---|---|
@@ -124,7 +124,7 @@ Everything goes to `example1/output/`, which git ignores:
 Listen with:
 
 ```bash
-open example1/output/conversation.wav
+open examples/example1/output/conversation.wav
 ```
 
 ## What to expect on an M4
@@ -134,7 +134,7 @@ open example1/output/conversation.wav
 - **Voice prompts are copied for the CPU.** The published voice files (`NATF2.pt` and the rest) were saved from an NVIDIA GPU. Upstream loads them without moving them to the CPU, which crashes on a Mac with `Attempting to deserialize object on a CUDA device`. The script saves a CPU copy of your voice in `output/voices/` and passes it to `moshi.offline` with `--voice-prompt-dir`. The submodule is untouched.
 - **The Apple GPU (`--device mps`) is experimental.** Upstream turned automatic MPS support off. It may fail with unsupported-operation errors, or run no faster than the CPU. If it errors, go back to the default CPU.
 - **Shorter is faster.** Fewer turns and shorter `pause:` values mean less audio to process.
-- **For live conversation, use an NVIDIA GPU.** See [PSC Bridges-2 GPUs](../README.md#psc-bridges-2-gpus).
+- **For live conversation, use an NVIDIA GPU.** See [PSC Bridges-2 GPUs](../../README.md#psc-bridges-2-gpus).
 
 ## Tips
 

@@ -13,11 +13,11 @@ retrieving during the conversation, this retrieves *before* it:
   4. The community MLX port's web server starts, as in example3, so you can
      talk to the chef live on a Mac.
 
-Run it inside the `personaplex-mlx` conda environment (see ../environment-mlx.yml):
+Run it inside the `personaplex-mlx` conda environment (see ../../environment-mlx.yml):
 
-  python example4/serve.py --topic "pasta with tomato sauce"
-  python example4/serve.py --topic "fluffy rice and roast chicken" --budget 1800
-  python example4/serve.py --topic "buttermilk pancakes" --dry-run    # show the prompt only
+  python examples/example4/serve.py --topic "pasta with tomato sauce"
+  python examples/example4/serve.py --topic "fluffy rice and roast chicken" --budget 1800
+  python examples/example4/serve.py --topic "buttermilk pancakes" --dry-run    # show the prompt only
 """
 
 import argparse
@@ -207,7 +207,7 @@ def main() -> None:
     parser.add_argument("--budget", type=int, default=1500,
                         help="Maximum persona length in characters (default: 1500)")
     parser.add_argument("--knowledge", type=Path, default=HERE / "knowledge" / "cooking.txt",
-                        help="Fact card file (default: example4/knowledge/cooking.txt)")
+                        help="Fact card file (default: examples/example4/knowledge/cooking.txt)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Only show the retrieved cards and the persona; don't start the server")
     parser.add_argument("--no-copy", action="store_true",

@@ -12,7 +12,7 @@ This script lets you write your side of the conversation as text instead:
      conversation.wav (one voice at a time, `--gap` seconds apart) and
      conversation_live.wav (stereo, with the real, overlapping timing).
 
-Outputs (in example1/output/ by default):
+Outputs (in examples/example1/output/ by default):
 
   input.wav              your lines as speech, with the pauses
   agent.wav              the agent's reply audio, as long as input.wav
@@ -22,13 +22,13 @@ Outputs (in example1/output/ by default):
   conversation_live.wav  stereo, you on the left, the agent on the right
   voices/                CPU copy of the voice prompt (see cpu_voice_prompt_dir)
 
-Run it inside the `personaplex` conda environment (see ../environment.yml),
+Run it inside the `personaplex` conda environment (see ../../environment.yml),
 logged in to Hugging Face with the model license accepted:
 
-  python example1/run_example.py
-  python example1/run_example.py --input-only       # only build input.wav
-  python example1/run_example.py --mix-only --gap 1 # remix an existing run
-  python example1/run_example.py --device mps       # Apple GPU (slow; see README)
+  python examples/example1/run_example.py
+  python examples/example1/run_example.py --input-only       # only build input.wav
+  python examples/example1/run_example.py --mix-only --gap 1 # remix an existing run
+  python examples/example1/run_example.py --device mps       # Apple GPU (slow; see README)
 """
 
 import argparse
@@ -453,9 +453,9 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("prompts", nargs="?", default=HERE / "prompts.txt", type=Path,
-                        help="Prompts file (default: example1/prompts.txt)")
+                        help="Prompts file (default: examples/example1/prompts.txt)")
     parser.add_argument("--out-dir", default=HERE / "output", type=Path,
-                        help="Where to write results (default: example1/output)")
+                        help="Where to write results (default: examples/example1/output)")
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps"],
                         help="cpu (default) or mps, the Apple GPU (untested upstream)")
     parser.add_argument("--seed", type=int, default=42424242)
