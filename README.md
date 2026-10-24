@@ -157,13 +157,28 @@ For offline evaluation without a GPU, install CPU-only PyTorch and add `--device
 
 ### Example: text prompts to audio (MacBook Pro M4)
 
-[`example1/`](example1) is for a **MacBook Pro M4**. You write your side of a conversation as text in [`prompts.txt`](example1/prompts.txt). Your lines are spoken with macOS `say`, run through PersonaPlex on the Mac's CPU, and the agent's reply is saved as audio with a transcript. Run from the root of this repository:
+[`example1/`](example1) is for a **MacBook Pro M4**. You write your side of a conversation as text in [`prompts.txt`](example1/prompts.txt): the agent's voice, its role prompt, and your lines, with a pause after each line for the answer. The script:
+
+1. Speaks your lines with macOS `say` and builds `input.wav`.
+2. Checks that your Hugging Face account can download the gated model. If not, it stops and prints the login steps.
+3. Runs PersonaPlex on the Mac's CPU, with a CPU copy of the voice prompt (see [Apple MacBook Pro (M4)](#apple-macbook-pro-m4)).
+4. Saves the agent's reply audio, a transcript, and two mixes:
+   - `conversation.wav`: one voice at a time, with 0.5 s of silence between voices (`--gap`)
+   - `conversation_live.wav`: the real, overlapping timing
+
+The included scenario is a graduate student asking a [HuBMAP](https://portal.hubmapconsortium.org/) data guide how to find public datasets for computational biology. Run from the root of this repository:
 
 ```bash
 python example1/run_example.py
 ```
 
-See [example1/README.md](example1/README.md) for the prompts format and options.
+To remake the mixes from an existing run without rerunning the model, for example with a 1-second gap:
+
+```bash
+python example1/run_example.py --mix-only --gap 1
+```
+
+See [example1/README.md](example1/README.md) for the prompts format, all options, and the output files.
 
 ## Choosing a persona
 
@@ -250,13 +265,20 @@ ssh -L 8998:<compute-node>:8998 <user>@bridges2.psc.edu
 
 ### Apple MacBook Pro (M4)
 
-**It runs on the CPU, slowly. The Apple GPU (MPS) is unsupported and untested.**
+**Offline inference works on the CPU. The Apple GPU (MPS) is unsupported and untested.**
+
+Measured with [example1](example1) on a MacBook Pro M4 Max with 48 GB, on the CPU, with the model already downloaded:
+
+| Input audio | Wall time | Peak memory |
+|---|---|---|
+| 6.3 s (one question) | 27.5 s, including model loading | ~20 GB |
+| 64.9 s (seven questions) | about 3 minutes, including model loading (from file timestamps) | not measured |
 
 - The upstream code is CUDA-first. Both `moshi.server` and `moshi.offline` default to `--device cuda`, so on a Mac you must pass `--device cpu`. The server's automatic MPS detection is commented out in the code.
 - PyTorch 2.4.1 from [`environment.yml`](environment.yml) does detect MPS on an M4 Max (checked on macOS 15.6.1), and the model loader has an MPS code path. You can try `--device mps`, but expect unsupported-op errors or poor performance. Nobody upstream has tested it.
 - **Voice prompts crash on the CPU as published.** The `.pt` voice files were saved from a CUDA GPU, and upstream's `torch.load` has no `map_location`, so `--device cpu` fails with `Attempting to deserialize object on a CUDA device`. Load each voice with `map_location="cpu"`, save it again, and pass that folder with `--voice-prompt-dir`. [example1](example1) does this for you.
 - **Memory:** Apple Silicon shares one pool of RAM between the CPU and GPU. M4 MacBook Pros ship with 16–128 GB depending on the chip. A 16 GB model can't comfortably hold the ~15 GB of weights plus macOS. **24 GB is a practical minimum, and 36–48 GB+ (M4 Pro / M4 Max) is better.**
-- **Bottom line:** fine for trying offline WAV inference on the CPU. For live, full-duplex conversation, use an NVIDIA GPU, such as a Bridges-2 node. A community Swift port for Apple Silicon has been [described](https://mewayz.com/en/blog/nvidia-personaplex-7b-on-apple-silicon-full-duplex-speech-to-speech-in-swift), but it's unverified and not from NVIDIA.
+- **Bottom line:** fine for offline WAV inference on the CPU, at a few times slower than real time. For live, full-duplex conversation, use an NVIDIA GPU, such as a Bridges-2 node. A community Swift port for Apple Silicon has been [described](https://mewayz.com/en/blog/nvidia-personaplex-7b-on-apple-silicon-full-duplex-speech-to-speech-in-swift), but it's unverified and not from NVIDIA.
 
 ## License
 
