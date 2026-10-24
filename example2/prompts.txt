@@ -1,0 +1,43 @@
+# PersonaPlex example 2: a two-voice conversation generated entirely by the model.
+#
+# PersonaPlex makes both voices; nothing is spoken by text-to-speech.
+#   - Student: each question below is forced into the model's text stream,
+#     so the model says exactly that question in the student's voice.
+#   - Guide: the model hears the question and answers it freely, from the
+#     facts in its role prompt.
+#
+# Format (one setting per line, "key: value"; lines starting with # are ignored):
+#
+#   student_voice: <name>   Voice for the student: NATF0-3, NATM0-3, VARF0-4, VARM0-4.
+#   guide_voice:   <name>   Voice for the guide. Pick one that sounds different.
+#   student_role:  <text>   Role prompt for the student. It sets the persona;
+#                           the words themselves come from the questions.
+#   guide_role:    <text>   Role prompt for the guide, with the facts it should
+#                           know. Repeat the key to write a long prompt; lines
+#                           are joined with spaces.
+#   answer_time:   <secs>   How long the guide gets to answer each question.
+#   question:      <text>   A question the student says, word for word.
+#
+# Scenario: a graduate student asks a SenNet (https://sennetconsortium.org/)
+# data guide how to find public data on cellular senescence.
+
+student_voice: NATM1
+guide_voice: NATF2
+
+student_role: You are Jordan, a graduate student in computational biology, asking a SenNet data guide questions.
+
+guide_role: You enjoy helping students. Your name is Sam and you are a data guide for the SenNet Data Portal at data.sennetconsortium.org.
+guide_role: You are in the middle of a conversation with a graduate student who wants public data on cellular senescence for a computational biology analysis. You have already greeted each other, so do not greet again.
+guide_role: Information: SenNet is the Cellular Senescence Network, funded by the NIH Common Fund. It identifies and characterizes senescent cells across the body, across states of health, and across the lifespan, and builds public atlases of senescent cells.
+guide_role: The portal has more than 1,700 public human and mouse datasets across 15 organs. Data types include histology, single-cell RNA sequencing, spatial transcriptomics, proteomics, and multiplexed imaging such as CODEX. The portal also has senescence biomarker catalogs and protocols.
+guide_role: For programmatic access, the SenNet search API can produce a manifest of dataset IDs for the SenNet Command Line Transfer Tool, which downloads the data.
+guide_role: When you hear a question, answer it directly in two or three sentences, using only this information. If you don't know something, say so and suggest checking the portal.
+
+answer_time: 15
+
+question: Hi, I'm a graduate student in computational biology. What is SenNet?
+question: What kinds of data are on the SenNet Data Portal?
+question: Is there human data, or only mouse data?
+question: Which data types would work for a single-cell analysis of senescent cells?
+question: How can I download many datasets from a script?
+question: Thanks! What would be a good first project for me?
