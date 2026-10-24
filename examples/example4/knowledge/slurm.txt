@@ -1,0 +1,110 @@
+# Slurm knowledge base for example4: one fact card per paragraph.
+#
+# Format: the first line of a card is "[id] keywords, ...". The lines after
+# it are the card's text, which is copied into the engineer's prompt when the
+# card is retrieved. Cards are separated by a blank line; lines starting with
+# "#" are comments. Write each card as one or two spoken-style sentences: the
+# model reads them as instructions, not as a document.
+#
+# Source: the Slurm documentation, version 26.05, by SchedMD
+# (https://slurm.schedmd.com/documentation.html): the Quick Start User Guide,
+# the sbatch, srun, salloc, and sacct man pages, and the Job Array, Job State
+# Codes, and Job Reason Codes pages. The facts are summarized in our own
+# words. Partition names, accounts, GPU types, and limits differ from cluster
+# to cluster, so those cards point students to their site's own settings.
+
+[slurm-overview] slurm, what is slurm, scheduler, workload manager, cluster, queue
+Slurm is an open source workload manager for Linux clusters. It gives users access to compute nodes for a set amount of time, starts and monitors their work on those nodes, and keeps a queue of waiting jobs when there aren't enough resources.
+
+[architecture] slurmctld, slurmd, daemon, controller, login node, architecture
+A central controller called slurmctld runs on a management node, and a daemon called slurmd runs on every compute node. You run Slurm commands from a login node; your work then runs on the compute nodes.
+
+[concepts] node, partition, job, job step, concepts, terminology
+Slurm has four main ideas: nodes are the computers, partitions are groups of nodes that act as queues with their own limits, a job is an allocation of resources for a set time, and job steps are the tasks you launch inside a job.
+
+[sbatch] sbatch, submit, batch script, batch job, job id
+Submit a batch script with sbatch followed by the script name. Slurm queues it, replies with "Submitted batch job" and the job ID, and runs the script later on the compute nodes.
+
+[sbatch-directives] sbatch, sbatch directive, script, header, options
+In a batch script, put each option on a line starting with pound SBATCH, before the first command; directives after the first command are ignored. Options typed on the sbatch command line override the ones in the script.
+
+[time-limit] time, time limit, walltime, hours, minutes, timeout
+Set the time limit with dash dash time, for example time equals two colon zero zero colon zero zero for two hours, or one dash twelve for one day and twelve hours. A job that runs past its limit is stopped with the state TIMEOUT.
+
+[nodes-tasks-cpus] nodes, tasks, ntasks, cpus, cpus per task, cores, threads, mpi, openmp
+Ask for nodes with dash N, for tasks, which are usually MPI processes, with dash n, and for CPU cores per task, which is what threaded or OpenMP programs need, with dash c, also called cpus per task.
+
+[memory] memory, mem, ram, mem per cpu, out of memory
+Request memory with dash dash mem, which is per node and in megabytes unless you add G for gigabytes, or with mem per cpu; use one or the other, not both. A job that uses more memory than it asked for can end with the state OUT_OF_MEMORY.
+
+[gpus] gpu, gpus, gres, cuda, accelerator, gpu job
+Request GPUs with dash dash gres equals gpu colon two for two GPUs per node, or with dash dash gpus. You can name a GPU type, like gpu colon type colon count, but type names differ by cluster, so check your site's documentation.
+
+[partition-account] partition, queue, account, allocation, charge
+Choose a partition with dash p and the account to charge with dash A. Partition and account names are specific to each cluster: run sinfo to see the partitions, where the default one is marked with a star.
+
+[output-files] output, error, log, slurm out, stdout, stderr, file name
+By default, a batch job's output goes to a file called slurm dash job ID dot out, in the directory you submitted from. Change it with dash o for output and dash e for errors; percent j becomes the job ID and percent x the job name.
+
+[working-directory] directory, working directory, chdir, submit directory, path
+A batch job starts in the directory you ran sbatch from, unless you set another one with dash dash chdir. The variable SLURM_SUBMIT_DIR holds the submit directory.
+
+[environment-variables] environment variable, slurm_job_id, nodelist, ntasks, variables
+Inside a job, Slurm sets variables you can use in your script: SLURM_JOB_ID is the job ID, SLURM_JOB_NODELIST lists the nodes, SLURM_NTASKS is the number of tasks, and SLURM_CPUS_PER_TASK is set when you asked for cpus per task.
+
+[srun] srun, launch, parallel, job step, tasks, mpi
+srun launches parallel tasks. Inside a job it starts a job step using the job's resources; run outside a job, it first gets an allocation and then runs. Adding dash l labels each output line with its task number.
+
+[mpi] mpi, openmpi, mpich, pmix, pmi2, mpirun, parallel
+Most modern MPI libraries can be launched directly with srun through PMI2 or PMIx, so srun starts and tracks every MPI process.
+
+[salloc] salloc, interactive, allocation, shell, interactive job
+salloc gives you an allocation right away and starts a shell; inside it, run your programs with srun. When you exit the shell, the allocation is released.
+
+[srun-pty] interactive, pty, shell, bash, interactive session, compute node
+srun with dash dash pty runs a task in pseudo-terminal mode, which is how many clusters give you an interactive shell on a compute node, for example srun dash dash pty bash. Check your site's documentation for its recommended interactive command.
+
+[squeue] squeue, queue, status, my jobs, running, pending, check
+squeue shows the queue: running jobs first, then pending jobs in priority order. In the state column, R means running and PD means pending, and pending jobs show a reason. Add dash u and your user name to see only your jobs.
+
+[pending-reasons] pending, waiting, reason, why, priority, resources, not starting, stuck
+A pending job's reason tells you why it's waiting: Priority means higher-priority jobs are ahead of it, Resources means the resources it needs are busy, Dependency means it's waiting on another job, and PartitionTimeLimit means it asked for more time than the partition allows.
+
+[job-states] state, failed, completed, cancelled, timeout, node fail, preempted, exit
+Finished jobs end in a state: COMPLETED means every node exited with code zero, FAILED means a non-zero exit code or another failure, CANCELLED means a user or admin cancelled it, TIMEOUT means it hit its time limit, and NODE_FAIL means a node failed.
+
+[scancel] scancel, cancel, kill, stop, delete job
+Cancel a job with scancel and the job ID. For a job array, scancel with the array's ID cancels every task, and an underscore and an index, like 20 underscore 4, cancels just one task.
+
+[sinfo] sinfo, nodes, partitions, idle, down, availability
+sinfo shows partitions and the state of their nodes, such as idle, allocated, or down. The default partition is marked with a star.
+
+[sacct] sacct, accounting, history, finished job, memory used, elapsed, maxrss
+sacct shows accounting records for your jobs, by default from midnight today. Use dash j and a job ID for one job, and a format option with fields like State, Elapsed, MaxRSS for peak memory, and ExitCode to see how a job went.
+
+[scontrol] scontrol, show job, details, inspect, hold, release
+scontrol show job and the job ID prints everything Slurm knows about a job; scontrol show partition and scontrol show node do the same for partitions and nodes. Many other scontrol actions need administrator rights.
+
+[sstat] sstat, running job, usage, monitor, memory, cpu
+sstat reports the resource usage of a job or job step while it's still running.
+
+[job-arrays] array, job array, many jobs, parameter sweep, array task id
+To run many similar jobs, submit a job array with dash dash array, for example array equals zero dash thirty-one. Each task gets its own index in SLURM_ARRAY_TASK_ID; percent A and percent a in the output name give the array ID and the index.
+
+[array-limits] array, throttle, limit, simultaneous, max array size
+Add a percent sign and a number to limit how many array tasks run at once, for example array equals zero dash fifteen percent four. The largest allowed array is set by the cluster; Slurm's default is 1001 tasks.
+
+[dependencies] dependency, afterok, afterany, afternotok, singleton, workflow, pipeline, chain
+To start a job only after another finishes, use dash dash dependency. afterok and a job ID waits for success, afterany for any ending, afternotok for a failure, and singleton runs one job at a time among jobs with the same name and user.
+
+[job-steps] job step, many tasks, efficiency, best practice, small jobs
+Slurm handles one job with many job steps more efficiently than many separate jobs, so group related work into one job, and use a job array when the jobs are identical apart from their input.
+
+[constraints-exclusive] constraint, feature, exclusive, node type
+Ask for nodes with a particular feature using dash C, also called constraint, and for whole nodes to yourself with dash dash exclusive. Feature names depend on the cluster.
+
+[email] email, mail, notify, notification
+Get email about a job with dash dash mail type, for example END or FAIL, and dash dash mail user with your address, if your cluster has email set up.
+
+[sbcast] sbcast, copy, local disk, broadcast, file, staging
+sbcast copies a file to the local storage of every node in your job, which can be faster than reading it from the shared file system.

@@ -217,13 +217,15 @@ Measured on an M4 Max: 72 ms per 80 ms audio frame at 4-bit (0.90× real time). 
 
 ### Example: more expertise with retrieval (RAG)
 
-[`examples/example4/`](examples/example4) asks whether retrieval-augmented generation can make the guide more of an expert. PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: you give a topic, BM25 picks the best of 25 cooking fact cards, and they're added to Chef Marco's persona, which then runs live on your Mac as in example3.
+[`examples/example4/`](examples/example4) asks whether retrieval-augmented generation can make the guide more of an expert, for high-performance computing. A student talks with Riley, an HPC engineer played by PersonaPlex.
+
+PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 32 fact cards summarized from the [Slurm documentation](https://slurm.schedmd.com/documentation.html), and they're added to the engineer's persona, which then runs live on your Mac as in example3.
 
 ```bash
-python examples/example4/serve.py --topic "pasta with tomato sauce"
+python examples/example4/serve.py --topic "submitting a GPU batch job"
 ```
 
-In a small live test, the retrieved persona drew on its cards, for example "you don't need oil" where the generic chef said to add oil. But it still garbled numbers and sometimes answered a different question. See [examples/example4/README.md](examples/example4/README.md) for why plain RAG doesn't fit PersonaPlex, the alternatives, and the test.
+In a small live test, "How do I ask for two GPUs and four hours?" got the correct `--gres=gpu:2` in all three runs with retrieved cards, and no command at all without them. No run answered the time half, because the time-limit card wasn't retrieved. See [examples/example4/README.md](examples/example4/README.md) for why plain RAG doesn't fit PersonaPlex, the alternatives, and the test.
 
 ## Choosing a persona
 

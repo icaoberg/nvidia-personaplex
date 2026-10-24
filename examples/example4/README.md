@@ -1,15 +1,17 @@
 # Example 4: Giving the guide more expertise with retrieval (RAG)
 
-Can retrieval-augmented generation (RAG) make PersonaPlex's guide more of an expert? This example answers that question and builds the approach that fits PersonaPlex best: **retrieve before the conversation, then prompt**. You say what you want to cook. The script picks the most relevant facts from a cooking knowledge base, builds Chef Marco's persona from them, and starts the live web page from [example3](../example3), running on your Mac.
+Can retrieval-augmented generation (RAG) make PersonaPlex's guide more of an expert? This example answers that question for **high-performance computing**. There are two roles: a **student** learning to use a cluster, and **Riley, an HPC engineer**, played by PersonaPlex. The engineer's expertise comes from a knowledge base summarized from the [Slurm documentation](https://slurm.schedmd.com/documentation.html).
+
+The example builds the approach that fits PersonaPlex best: **retrieve before the conversation, then prompt**. The student says what they need help with. The script picks the most relevant Slurm facts, builds the engineer's persona from them, and starts the live web page from [example3](../example3), running on your Mac.
 
 ```
---topic "pasta with tomato sauce"
+--topic "submitting a GPU batch job"
         │
         ▼
-knowledge/cooking.txt ──BM25──► best fact cards ──► Chef Marco persona (≤ 1,500 chars)
-   (25 fact cards)                                        │
-                                                          ▼
-                        browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
+knowledge/slurm.txt ──BM25──► best fact cards ──► Riley's persona (≤ 1,500 chars)
+   (32 fact cards)                                       │
+                                                         ▼
+                       browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
 ```
 
 ## Why plain RAG doesn't drop in
@@ -24,37 +26,48 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
 
 | Approach | How it works | Expertise gain | Effort |
 |---|---|---|---|
-| **1. Retrieve before connecting** (this example) | Keep a knowledge base of short fact cards. You pick a topic, the closest cards are retrieved, and a focused persona is built and sent, within a length budget. | Moderate: the right facts for this session, not all facts | Small: one script plus a cards file; no model changes |
+| **1. Retrieve before connecting** (this example) | Keep a knowledge base of short fact cards. The student picks a topic, the closest cards are retrieved, and a focused persona is built and sent, within a length budget. | Moderate: the right facts for this session, not all facts | Small: one script plus a cards file; no model changes |
 | **2. Re-prompt between sessions** | Same retrieval, but reconnect with a new prompt when the topic changes. Each connection reloads the persona in about 2 s on MLX. | Moderate, across topics | Small, but the conversation restarts |
-| **3. PersonaPlex as the voice, an LLM as the brain** | Transcribe the user's speech (e.g. Whisper on MLX), answer with an LLM over a full RAG index, then force the answer into PersonaPlex's text stream as example2 does. | High: real RAG over any amount of material | Large: you lose most of the natural full-duplex interplay and add latency |
+| **3. PersonaPlex as the voice, an LLM as the brain** | Transcribe the student's speech (e.g. Whisper on MLX), answer with an LLM over a full RAG index of the Slurm documentation, then force the answer into PersonaPlex's text stream as example2 does. | High: real RAG over the whole documentation | Large: you lose most of the natural full-duplex interplay and add latency |
 | **4. Fine-tuning** | Train on domain conversations. | High within the domain | Very large: needs GPUs and conversation data. I haven't checked whether NVIDIA released training code. |
 
-**Recommendation:** start with option 1. It fits how PersonaPlex is meant to be used and runs live on a Mac, and the right 800–1,500 characters of facts for *tonight's dish* beat a generic persona. If you need real depth, such as answering from a whole cookbook, that requires option 3. At that point PersonaPlex is mainly the voice.
+**Recommendation:** start with option 1. It fits how PersonaPlex is meant to be used and runs live on a Mac, and the right 800–1,500 characters of facts for *this student's problem* beat a generic persona. If you need real depth, such as answering from every Slurm man page, that requires option 3. At that point PersonaPlex is mainly the voice.
 
 ## How this example works
 
-1. **Knowledge base:** [`knowledge/cooking.txt`](knowledge/cooking.txt) holds 25 fact cards: pasta, sauces, rice, eggs, searing, roasting, baking, substitutions, and food safety with USDA temperatures. Each card is one or two spoken-style sentences, because the model treats its prompt as instructions to follow, not a document to quote.
-2. **Retrieval:** [`serve.py`](serve.py) ranks the cards against your topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25), a standard keyword-ranking formula, in pure Python with no extra packages. Each card's keyword line counts double. Filler words ("I", "want", "with", "but") are ignored, and simple plurals are matched ("eggs" ↔ "egg").
-3. **Persona:** a short base persona (Chef Marco: patient, step by step, checks in, admits uncertainty) gets the best cards added, in rank order, until the next card would exceed `--budget` (1,500 characters by default). Cards that match nothing are never added. For a topic the knowledge base doesn't cover, the script says so and uses the base persona alone.
+1. **Knowledge base:** [`knowledge/slurm.txt`](knowledge/slurm.txt) holds 32 fact cards summarized from the Slurm documentation (version 26.05). They cover:
+   - Slurm's concepts and architecture
+   - `sbatch` and its directives; time, CPU, memory and GPU requests; partitions and accounts
+   - output files, the working directory, and environment variables
+   - `srun`, MPI, and interactive sessions with `salloc` and `srun --pty`
+   - `squeue`, pending reasons, job states, `scancel`, `sinfo`, `sacct`, `scontrol`, `sstat`
+   - job arrays and their limits, dependencies, constraints, email, and `sbcast`
+
+   Each card is one or two spoken-style sentences, because the model follows its prompt as instructions and says things aloud. So commands are spelled the way an engineer would say them: "dash dash gres equals gpu colon two".
+2. **Retrieval:** [`serve.py`](serve.py) ranks the cards against the topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25), a standard keyword-ranking formula, in pure Python with no extra packages. Each card's keyword line counts double. Filler words ("I", "want", "my", "why") are ignored, and simple plurals are matched ("dependencies" ↔ "dependency").
+3. **Persona:** a short base persona (Riley, the HPC engineer: asks what the student is running, explains one step at a time, gives exact commands, checks in, admits uncertainty) gets the best cards added in rank order. Adding stops when the next card would exceed `--budget` (1,500 characters by default), or when the remaining cards score below 25% of the best one, which usually means they only matched a common word like "job". For a topic the knowledge base doesn't cover, the script says so and uses the base persona alone.
 4. **Live conversation:** the persona is printed and copied to the clipboard, and the community MLX server starts, exactly as in example3.
 
 Examples of what gets retrieved:
 
 | Topic | Cards retrieved | Persona length |
 |---|---|---|
-| `pasta with tomato sauce` | tomato-sauce, pasta-finish, pasta-water | 1,047 |
-| `roast chicken and vegetables` | chicken, roast-vegetables, meat-temps | 1,021 |
-| `fluffy rice` | rice | 633 |
-| `buttermilk pancakes but I have no buttermilk` | buttermilk, pancakes, baking-powder | 915 |
-| `sushi` | none: the knowledge base has no sushi cards, so it uses the base persona | 395 |
+| `submitting a GPU batch job` | gpus, sbatch, working-directory, output-files | 1,378 |
+| `why is my job pending` | squeue, pending-reasons | 1,072 |
+| `job arrays and dependencies` | job-arrays, dependencies, array-limits, scancel | 1,452 |
+| `my job ran out of memory` | memory, output-files, sstat, sacct | 1,351 |
+| `interactive session on a compute node` | srun-pty, salloc, architecture | 1,191 |
+| `checking how much memory my finished job used` | sacct, memory, sstat | 1,140 |
+| `running MPI across nodes` | nodes-tasks-cpus, mpi, srun, architecture, constraints-exclusive | 1,490 |
+| `kubernetes` | none: the knowledge base is about Slurm, so it uses the base persona | 558 |
 
 ## The pieces
 
 ### The flow
 
 ```
---topic "pasta with tomato sauce"
-   → tokenize → BM25 ranking over 25 fact cards → best cards
+--topic "submitting a GPU batch job"
+   → tokenize → BM25 ranking over 32 fact cards → best cards
    → base persona + cards (≤ 1,500 chars) → printed and copied
    → personaplex_mlx.local_web → browser at localhost:8998 (mic in, voice out)
 ```
@@ -64,21 +77,22 @@ Examples of what gets retrieved:
 | File | What it is |
 |---|---|
 | [`README.md`](README.md) | This explanation: why plain RAG doesn't fit, the alternatives, how to run and extend the example, and the live test |
-| [`knowledge/cooking.txt`](knowledge/cooking.txt) | The knowledge base: 25 fact cards, one per paragraph |
+| [`knowledge/slurm.txt`](knowledge/slurm.txt) | The knowledge base: 32 Slurm fact cards, one per paragraph |
 | [`serve.py`](serve.py) | The program: retrieves cards, builds the persona, and starts the live server |
 
-### The knowledge base: `knowledge/cooking.txt`
+### The knowledge base: `knowledge/slurm.txt`
 
 Each card is one paragraph:
 
 ```
-[pasta-water] pasta, spaghetti, noodles, penne, boil, water, salt
-Cook pasta in a big pot of water at a rolling boil, salted with about one tablespoon...
+[gpus] gpu, gpus, gres, cuda, accelerator, gpu job
+Request GPUs with dash dash gres equals gpu colon two for two GPUs per node, or with dash dash gpus...
 ```
 
 - **First line:** `[id]` followed by keywords. The keywords are what retrieval matches against most strongly.
-- **Body:** exactly what Chef Marco is told when the card is retrieved. It's written as one or two spoken-style sentences, because the model follows its prompt as instructions rather than quoting it.
-- **Food-safety cards** (chicken, meat temperatures, leftovers) use the USDA safe minimum internal temperatures; the source is cited at the top of the file.
+- **Body:** exactly what Riley is told when the card is retrieved. It's written as one or two spoken-style sentences, with commands spelled out as they're said aloud.
+- **Site-specific settings:** partition names, accounts, GPU types, feature names and array limits differ from cluster to cluster. Those cards tell the student to check their site's settings (`sinfo`, the site documentation) instead of guessing.
+- **Source:** the top of the file cites the Slurm documentation and the pages used. The facts are summarized in our own words, not copied.
 - **Formatting:** blank lines separate cards, and lines starting with `#` are comments.
 
 ### The program: `serve.py`
@@ -87,22 +101,22 @@ In the order they're used:
 
 | Piece | What it does |
 |---|---|
-| Settings | `MODEL_REPO` (NVIDIA's gated model), the voice (`NATM0`, labeled "NATURAL_M0" in the page's menu), `MIN_MEMORY_GB`, and the BM25 tuning numbers `BM25_K1`, `BM25_B`, and `KEYWORD_WEIGHT` |
-| `STOPWORDS` | Filler words ignored in matching ("I", "want", "with", "but", …). Without them, "but I have no buttermilk" also matched the seasoning card, whose text contains "but". |
-| `BASE_PERSONA` | Chef Marco without facts: patient, asks what you have, teaches one step at a time, checks in, admits uncertainty. Your topic is filled in, and it ends with "Use these facts:". |
-| `tokenize()` | Turns text into lowercase words, dropping stopwords and simple plurals: "Boiled Eggs" → `boiled`, `egg` |
+| Settings | `MODEL_REPO` (NVIDIA's gated model), the voice (`NATF2`, labeled "NATURAL_F2" in the page's menu), `MIN_MEMORY_GB`, the BM25 tuning numbers `BM25_K1`, `BM25_B` and `KEYWORD_WEIGHT`, and `MIN_RELATIVE_SCORE` (the 25% cutoff) |
+| `STOPWORDS` | Filler words ignored in matching ("I", "want", "my", "why", "run", …). Without "run" and "running", "running MPI across nodes" also pulled in the `sstat` and `squeue` cards, which mention running jobs. |
+| `BASE_PERSONA` | Riley without facts: an HPC engineer on a Slurm cluster who asks what the student is running, explains one step at a time, gives exact commands, checks in, and points to the documentation or support team when unsure. The topic is filled in, and it ends with "Use these facts:". |
+| `singular()`, `tokenize()` | Turn text into lowercase words, dropping stopwords and simple plurals: "Job Arrays and Dependencies" → `job`, `array`, `dependency` |
 | `load_cards()` | Reads the knowledge file into a list of cards (id, keywords, text), and stops with an error naming any malformed card |
-| `bm25_rank()` | Scores every card against your topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25). See [How the BM25 score works](#how-the-bm25-score-works). Returns the cards that match at all, best first. |
-| `build_persona()` | Adds the best cards to the base persona, in rank order, until the next card would exceed `--budget` (1,500 characters by default). A card that doesn't fit is skipped and smaller ones are still tried. Cards that matched nothing are never added, so "sushi" gets the base persona alone. |
+| `bm25_rank()` | Scores every card against the topic with BM25. See [How the BM25 score works](#how-the-bm25-score-works). Returns the cards that match at all, best first. |
+| `build_persona()` | Adds the best cards to the base persona in rank order, within `--budget`. It stops at cards below 25% of the best score. A card that doesn't fit is skipped and smaller ones are still tried. |
 | `main()` | Reads the options, retrieves the cards, prints their scores and the finished persona, and copies it with `pbcopy`. With `--dry-run` it stops there. Otherwise it runs the checks below and starts the MLX web server with the persona. |
 | `check_mac()`, `sysctl()` | The same checks as example3: a Mac with Apple Silicon, the MLX port installed in this Python, and enough memory (warns below 16 GB) |
 | `check_model_access()` | Downloads the model's small `config.json` to confirm your Hugging Face login works, and prints the login steps if access is denied |
 
 ### How the BM25 score works
 
-For each word in your topic that appears in a card (its text, plus its keyword line counted `KEYWORD_WEIGHT` = 2 times), BM25 adds:
+For each word in the topic that appears in a card (its text, plus its keyword line counted `KEYWORD_WEIGHT` = 2 times), BM25 adds:
 
-- **More for rare words.** "Buttermilk" appears in one card, so it points strongly to that card; "salt" appears in several, so it counts less (the IDF term).
+- **More for rare words.** "GPU" appears in one card, so it points strongly to that card. "Job" appears in almost every card, so it counts for very little (the IDF term).
 - **More for repeated words, with diminishing returns.** A second mention helps, a tenth barely does (`BM25_K1` = 1.5 controls how fast this levels off).
 - **Less for long cards.** A long card doesn't win just by containing more words (`BM25_B` = 0.75 controls how much length is penalized).
 
@@ -115,8 +129,9 @@ These are BM25's standard parameter values. It's pure Python, with no extra pack
 | [`../../personaplex-mlx/`](../../personaplex-mlx) | The community MLX port that runs the model on the Mac's GPU with 4-bit weights. `serve.py` starts its web server, `personaplex_mlx.local_web`. |
 | [`../../environment-mlx.yml`](../../environment-mlx.yml) | The `personaplex-mlx` conda environment that everything runs in |
 | [`nvidia/personaplex-7b-v1`](https://huggingface.co/nvidia/personaplex-7b-v1) on Hugging Face | NVIDIA's model weights, the voice prompts, and the web page itself. They download on first use and are cached in `~/.cache/huggingface`. |
-| The browser page | Where you paste the persona into **Text Prompt**, pick **Voice** `NATURAL_M0`, click **Connect**, and talk. The page's own Text Prompt box takes precedence over `serve.py`'s `--text-prompt`, which is why you paste the persona. |
-| [example3](../example3) | The live setup this example builds on. Its chef persona is the generic baseline in the comparison below. |
+| The browser page | Where the student pastes the persona into **Text Prompt**, picks **Voice** `NATURAL_F2`, clicks **Connect**, and talks. The page's own Text Prompt box takes precedence over `serve.py`'s `--text-prompt`, which is why you paste the persona. |
+| [example3](../example3) | The live setup this example builds on |
+| [Slurm documentation](https://slurm.schedmd.com/documentation.html) | The source of the knowledge base |
 
 ## Running
 
@@ -129,22 +144,22 @@ conda activate personaplex-mlx
 See which cards a topic retrieves, without starting anything:
 
 ```bash
-python examples/example4/serve.py --topic "pasta with tomato sauce" --dry-run
+python examples/example4/serve.py --topic "submitting a GPU batch job" --dry-run
 ```
 
-Talk to the chef:
+Talk to the engineer:
 
 ```bash
-python examples/example4/serve.py --topic "pasta with tomato sauce"
+python examples/example4/serve.py --topic "submitting a GPU batch job"
 ```
 
-In the page that opens: paste the persona into **Text Prompt** (⌘V), pick **Voice** `NATURAL_M0`, click **Connect**, and allow the microphone. Use headphones.
+In the page that opens: paste the persona into **Text Prompt** (⌘V), pick **Voice** `NATURAL_F2`, click **Connect**, and allow the microphone. Use headphones.
 
 | Option | Effect |
 |---|---|
-| `--topic TEXT` | What you want to cook (required) |
+| `--topic TEXT` | What the student needs help with (required). Name everything you'll ask about, e.g. "a GPU batch job with a time limit". |
 | `--budget N` | Maximum persona length in characters (default `1500`) |
-| `--knowledge FILE` | Another fact card file, e.g. for a different subject |
+| `--knowledge FILE` | Another fact card file, e.g. for your own cluster's settings |
 | `--dry-run` | Only show the retrieved cards and the persona |
 | `--no-copy` | Don't copy the persona to the clipboard |
 | `--quant 4\|8\|none` | Weight quantization (default `4`) |
@@ -152,34 +167,37 @@ In the page that opens: paste the persona into **Text Prompt** (⌘V), pick **Vo
 
 ### Adding knowledge
 
-Add a paragraph to `knowledge/cooking.txt`:
+Add a paragraph to `knowledge/slurm.txt`. Facts about your own cluster are a good addition, since the general Slurm cards can't know them:
 
 ```
-[risotto] risotto, arborio, rice, stock, creamy
-Toast arborio rice in butter for a minute, then add warm stock a ladle at a time, stirring, until it's creamy and just tender, about eighteen minutes.
+[our-gpu-partition] gpu, partition, a100, our cluster
+On our cluster, GPU jobs go to the partition called gpu, and you request an A100 with dash dash gres equals gpu colon a100 colon one.
 ```
 
-The first line is `[id]` followed by keywords. The text after it is what the chef will be told. Use `--knowledge` to point at a different file entirely, such as a SenNet or HuBMAP fact file for the data guides.
+The first line is `[id]` followed by keywords. The text after it is what Riley will be told. Use `--knowledge` to point at a different file entirely.
 
 ## Does it help? A live comparison on a MacBook Pro M4 Max
 
-I asked the same spoken question, "How much salt should I put in the pasta water, and should I add oil?", to two personas on the live server, streamed in real time, with three seeds each. The **generic chef** is example3's persona, which says only "salt pasta water well". The **retrieved persona** is example4's `pasta with tomato sauce` persona, whose cards say "one tablespoon of kosher salt per four quarts… don't add oil".
+I asked the same spoken question, "How do I ask for two GPUs and four hours in my batch script?", on the live server, streamed in real time, with three seeds each, to two personas:
+- **Base persona:** Riley without facts (558 characters).
+- **Retrieved persona:** the persona for the topic `submitting a GPU batch job` (1,378 characters, with the gpus, sbatch, working-directory and output-files cards).
 
-| Seed | Generic chef (example3) | Retrieved pasta persona (example4) |
+| Seed | Base persona (no facts) | Retrieved persona |
 |---|---|---|
-| 1 | "a couple of tablespoons of oil will do the trick" ✗ | Talked about the sauce, using card facts ("a cup of starchy pasta water… a can of tomatoes, some garlic… fresh basil"), instead of answering |
-| 2 | "20 grams per litre… about 2 tablespoons" (not from its prompt) | "You don't need oil… bring it to a rolling boil… Stir in the first minute" ✓, but "a tablespoon per quart" ✗ (the card says per *four* quarts) |
-| 3 | Heat oil in a pan (off topic) | "It'll help the sauce cling" (a card phrase), still about the sauce |
+| 1 | "Are you using Slurm? The env variable helps it pick the right resources." (no command) | "You can use dash dash gres equals gpu colon two for two GPUs per node. Want to try that now?" ✓ |
+| 2 | "What are you trying to run exactly?" (no command) | "Add the GPUs you want with dash dash gres equals gpu colon two. That asks for two GPUs per node. Then [submit] your batch script with sbatch followed by the script name. Slurm will queue it and give you a job ID…" ✓ |
+| 3 | "Do you have your batch script ready? What are you trying to run on the GPUs?" (no command) | "You ask for 2 GPUs with dash dash gres equals gpu colon two, that's 2 GPUs per node, okay?" ✓ |
 
 **What this shows:**
-- **Retrieval changes what the chef knows and says.** Phrases from the retrieved cards showed up in all three runs, and the one direct answer got "no oil" right where the generic chef said to add oil.
-- **Retrieval doesn't make it reliable.** It garbled a number (per quart instead of per four quarts), and in two of three runs it answered about the sauce instead of the question. A 7B speech model answering in real time paraphrases loosely.
-- **Treat it as a better-informed conversation partner, not a reference.** For exact quantities and food safety, check a recipe or use a thermometer. For dependable expert answers, option 3 above is the way.
+- **Retrieval made the engineer useful.** With the cards, all three runs gave the correct Slurm option for two GPUs (`--gres=gpu:2`). Without them, the same persona never gave a command; it only asked questions back.
+- **It only knows what was retrieved.** No run answered the "four hours" half of the question, because the topic didn't mention time, so the time-limit card wasn't retrieved. Name everything you'll ask about in `--topic`, e.g. "a GPU batch job with a time limit".
+- **Treat it as a better-informed conversation partner, not a reference.** It can still garble details, and site-specific settings (partitions, accounts, GPU types) come from your cluster's documentation. For dependable answers across the whole documentation, option 3 above is the way.
 
 This is a small, informal test (one question, three seeds) on the 4-bit MLX model, not a benchmark.
 
 ## Things to know
 
-- **The persona length is a tradeoff.** More cards means more facts, but a longer prompt, and possibly a less coherent chef. 1,500 characters is a starting point, not a tested optimum. Try `--budget 1000` or `--budget 2500` and compare.
-- **Retrieval is keyword-based.** BM25 matches words, not meaning: "spaghetti" finds the pasta cards because "spaghetti" is in their keywords, but a word that's in no card finds nothing. For larger knowledge bases, embedding search (e.g. a small sentence-embedding model) would catch synonyms, at the cost of an extra dependency.
+- **The persona length is a tradeoff.** More cards means more facts, but a longer prompt, and possibly a less coherent engineer. 1,500 characters is a starting point, not a tested optimum. Try `--budget 1000` or `--budget 2500` and compare.
+- **Retrieval is keyword-based.** BM25 matches words, not meaning: "GPU" finds the GPU card because "gpu" is in its keywords, but a word that's in no card finds nothing. For larger knowledge bases, embedding search (e.g. a small sentence-embedding model) would catch synonyms, at the cost of an extra dependency.
 - **One topic per session.** To change topics, stop the server and start it again with a new `--topic` (option 2 above).
+- **The knowledge base reflects Slurm 26.05.** Options rarely change, but check the documentation for your cluster's Slurm version.

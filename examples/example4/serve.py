@@ -1,23 +1,27 @@
 #!/usr/bin/env python
-"""Talk live to a chef whose persona is built from retrieved facts (retrieve-then-prompt).
+"""Talk live to an HPC engineer whose persona is built from retrieved Slurm facts.
 
 PersonaPlex only takes knowledge through its text prompt, played into the
 model once before the conversation starts (see README.md). So instead of
-retrieving during the conversation, this retrieves *before* it:
+retrieving during the conversation, this retrieves *before* it
+(retrieve-then-prompt):
 
-  1. You say what you want to cook (--topic "pasta with tomato sauce").
-  2. The topic is matched against the fact cards in knowledge/cooking.txt
-     with BM25, a classic keyword-ranking formula.
-  3. The best cards are added to a short Chef Marco persona, up to a
-     character budget, and the persona is printed and copied.
-  4. The community MLX port's web server starts, as in example3, so you can
-     talk to the chef live on a Mac.
+  1. The student says what they need help with
+     (--topic "submitting a GPU batch job").
+  2. The topic is matched against the fact cards in knowledge/slurm.txt,
+     summarized from the Slurm documentation, with BM25, a classic
+     keyword-ranking formula.
+  3. The best cards are added to a short persona for Riley, a
+     high-performance computing engineer, up to a character budget, and the
+     persona is printed and copied.
+  4. The community MLX port's web server starts, as in example3, so the
+     student can talk to the engineer live on a Mac.
 
 Run it inside the `personaplex-mlx` conda environment (see ../../environment-mlx.yml):
 
-  python examples/example4/serve.py --topic "pasta with tomato sauce"
-  python examples/example4/serve.py --topic "fluffy rice and roast chicken" --budget 1800
-  python examples/example4/serve.py --topic "buttermilk pancakes" --dry-run    # show the prompt only
+  python examples/example4/serve.py --topic "submitting a GPU batch job"
+  python examples/example4/serve.py --topic "job arrays and dependencies" --budget 1800
+  python examples/example4/serve.py --topic "why is my job pending" --dry-run   # prompt only
 """
 
 import argparse
@@ -33,21 +37,26 @@ from pathlib import Path
 
 MODEL_REPO = "nvidia/personaplex-7b-v1"  # gated: license must be accepted
 HERE = Path(__file__).resolve().parent
-VOICE, VOICE_LABEL = "NATM0", "NATURAL_M0"  # MLX port's ID, web page's menu label
+VOICE, VOICE_LABEL = "NATF2", "NATURAL_F2"  # MLX port's ID, web page's menu label
 MIN_MEMORY_GB = 16  # 4-bit weights are ~4 GB, plus the audio codec and macOS
 BM25_K1, BM25_B = 1.5, 0.75  # standard BM25 parameters
 KEYWORD_WEIGHT = 2  # a card's keyword line counts this many times in its score
+MIN_RELATIVE_SCORE = 0.25  # skip cards scoring below this fraction of the best card
 STOPWORDS = {"a", "an", "and", "the", "to", "of", "for", "with", "in", "on", "i", "my",
-             "want", "make", "how", "do", "is", "it", "some", "tonight", "cook", "cooking",
-             "but", "have", "no", "not", "need", "or", "so", "what", "can", "should", "me"}
+             "want", "make", "how", "do", "is", "it", "some", "help", "use", "using", "get",
+             "but", "have", "no", "not", "need", "or", "so", "what", "can", "should", "me",
+             "about", "learn", "understand", "explain", "why", "does", "are",
+             "run", "running", "across"}
 
 # The persona without facts. {topic} is filled in; retrieved facts follow it.
 BASE_PERSONA = (
-    "You enjoy teaching people to cook. Your name is Chef Marco and you are a warm, "
-    "patient cooking teacher. You are talking with a student who wants to cook {topic}. "
-    "Ask what ingredients and equipment they have, then teach one step at a time, explain "
-    "why each step matters, and check in before moving on. Keep answers short and "
-    "encouraging. If you aren't sure about something, say so. Use these facts:"
+    "You enjoy teaching. Your name is Riley and you are a high performance computing "
+    "engineer who supports researchers on a Linux cluster that runs the Slurm workload "
+    "manager. You are talking with a student who wants help with {topic}. Ask what they "
+    "are trying to run and what they have tried, then explain one step at a time in plain "
+    "language, give the exact command when it helps, and check in before moving on. Keep "
+    "answers short and encouraging. If you aren't sure, say so and suggest the Slurm "
+    "documentation or the cluster's support team. Use these facts:"
 )
 
 
@@ -105,25 +114,32 @@ def check_model_access() -> None:
         )
 
 
+def singular(word: str) -> str:
+    """Strip a simple English plural: "dependencies" -> "dependency", "arrays" -> "array"."""
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def tokenize(text: str) -> list:
-    """Lowercase words for matching, without stopwords, with a plural "s" removed.
+    """Lowercase words for matching, without stopwords, in singular form.
 
     Args:
         text: Any text.
 
     Returns:
-        The words, e.g. "Boiled Eggs" -> ["boiled", "egg"].
+        The words, e.g. "Job Arrays and Dependencies" -> ["job", "array", "dependency"].
     """
-    words = re.findall(r"[a-z]+", text.lower())
-    return [w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
-            for w in words if w not in STOPWORDS]
+    return [singular(w) for w in re.findall(r"[a-z]+", text.lower()) if w not in STOPWORDS]
 
 
 def load_cards(path: Path) -> list:
     """Read the fact cards from a knowledge file.
 
     Args:
-        path: A file in the knowledge/cooking.txt format: paragraphs whose
+        path: A file in the knowledge/slurm.txt format: paragraphs whose
             first line is "[id] keyword, keyword, ..." followed by the text.
 
     Returns:
@@ -152,7 +168,7 @@ def bm25_rank(query: str, cards: list) -> list:
     KEYWORD_WEIGHT times so keywords matter more than incidental words.
 
     Args:
-        query: What the student wants to cook.
+        query: What the student needs help with.
         cards: Cards from load_cards().
 
     Returns:
@@ -180,10 +196,12 @@ def build_persona(topic: str, ranked: list, budget: int) -> tuple:
     """Add the best cards to the base persona without going over the budget.
 
     Cards are taken in rank order; a card that doesn't fit is skipped and
-    smaller, lower-ranked ones are still tried.
+    smaller, lower-ranked ones are still tried. Cards scoring below
+    MIN_RELATIVE_SCORE of the best card are left out: they usually match only
+    a common word like "job", so they'd add length without adding relevance.
 
     Args:
-        topic: What the student wants to cook, put into the persona.
+        topic: What the student needs help with, put into the persona.
         ranked: Output of bm25_rank().
         budget: Maximum persona length in characters.
 
@@ -193,6 +211,8 @@ def build_persona(topic: str, ranked: list, budget: int) -> tuple:
     persona = BASE_PERSONA.format(topic=topic)
     used = []
     for score, card in ranked:
+        if score < MIN_RELATIVE_SCORE * ranked[0][0]:
+            break
         if len(persona) + 1 + len(card["text"]) <= budget:
             persona += " " + card["text"]
             used.append((score, card))
@@ -203,11 +223,11 @@ def main() -> None:
     """Retrieve facts for the topic, build and show the persona, then start the server."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--topic", required=True,
-                        help='What you want to cook, e.g. "pasta with tomato sauce"')
+                        help='What the student needs help with, e.g. "submitting a GPU batch job"')
     parser.add_argument("--budget", type=int, default=1500,
                         help="Maximum persona length in characters (default: 1500)")
-    parser.add_argument("--knowledge", type=Path, default=HERE / "knowledge" / "cooking.txt",
-                        help="Fact card file (default: examples/example4/knowledge/cooking.txt)")
+    parser.add_argument("--knowledge", type=Path, default=HERE / "knowledge" / "slurm.txt",
+                        help="Fact card file (default: examples/example4/knowledge/slurm.txt)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Only show the retrieved cards and the persona; don't start the server")
     parser.add_argument("--no-copy", action="store_true",
@@ -228,7 +248,7 @@ def main() -> None:
     for score, card in used:
         print(f"  {score:5.2f}  [{card['id']}]")
     if not used:
-        print("  (none; the chef will rely on the base persona only. "
+        print("  (none; the engineer will rely on the base persona only. "
               "Try other words, or add cards to the knowledge file.)")
     print(f"\nPersona ({len(persona)} characters, budget {args.budget}). In the page, paste it "
           f"into Text Prompt and pick Voice {VOICE_LABEL}:\n\n{persona}\n")
