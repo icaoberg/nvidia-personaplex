@@ -79,6 +79,9 @@ Cancel a job with scancel and the job ID. For a job array, scancel with the arra
 [sinfo] sinfo, nodes, partitions, idle, down, availability
 sinfo shows partitions and the state of their nodes, such as idle, allocated, or down. The default partition is marked with a star.
 
+[sinfo-states] sinfo, node state, idle, mix, mixed, alloc, allocated, drain, drained, down, resv, reserved, not responding
+In sinfo, idle nodes are free, mix nodes are partly used, and alloc nodes are fully used. Drain means the node is being taken out of service once its jobs finish, down means it's unavailable, resv means it's reserved, and a star after the state means the node isn't responding.
+
 [sacct] sacct, accounting, history, finished job, memory used, elapsed, maxrss
 sacct shows accounting records for your jobs, by default from midnight today. Use dash j and a job ID for one job, and a format option with fields like State, Elapsed, MaxRSS for peak memory, and ExitCode to see how a job went.
 

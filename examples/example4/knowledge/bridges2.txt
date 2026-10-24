@@ -12,7 +12,8 @@
 # The facts are summarized in our own words. Partitions, limits, and SU rates
 # change over time, so check the guide for current values. Where the guide
 # contradicts itself (interact's default partition is given as RM-shared in
-# the text and as RM-small in its options table), the cards follow the text.
+# the text and as RM-small in its options table), the cards follow the text;
+# sinfo shows that RM-small does exist (see the CPU node notes below).
 # These cards are site-specific: they apply to Bridges-2, while slurm.txt and
 # lmod.txt cover Slurm and Lmod in general.
 #
@@ -41,6 +42,31 @@
 #   - NVIDIA DGX-2 datasheet, April 2018.
 #   - NVIDIA A100 product page (https://www.nvidia.com/en-us/data-center/a100/),
 #     which lists only the 80 GB versions.
+#
+# The CPU node cards (b2-cpu-*) use this read-only command, run on a
+# Bridges-2 login node on 2026-10-24:
+#   sinfo -p RM,RM-shared,RM-512,EM -o "%12P %6D %6c %10m %4X %4Y %4Z %f"
+# It showed 484 RM nodes (126 shared with RM-shared, feature RM-overlap),
+# 15 RM-512 nodes, and 4 EM nodes, all with one thread per core. The user
+# guide and ACCESS say 488 RM and 16 RM-512 nodes. A listing of every
+# partition the same day (sinfo -o "%15P %6D %6c %10m %12l %25f %G") explains
+# most of that: RM-small holds the other 4 regular nodes (484 + 4 = 488), and
+# a one-node "applications" partition has a node the size of an RM-512 node,
+# probably the 16th. RM-small is also the default partition that interact's
+# options table names. That listing showed every partition's time limit as
+# "infinite"; the user guide's limits are presumably enforced another way,
+# so the cards keep the guide's numbers. scontrol show node for one node of
+# each kind (r005 in RM and RM-shared, l002 in RM-512, e001 in EM) showed
+# Slurm 22.05.11, an el8_10 (Enterprise Linux 8.10) kernel, one thread per
+# core, billing equal to the core count, and CfgTRES mem=250G on the RM node
+# (256,000 MB real memory). A plain sinfo listing the same day gave every
+# node's name (r, l, e, v, w, gl, a001, robo-gh, hacc-gm, br) and confirmed that
+# l001, in the applications partition, is the 16th 512 GB node. Node states
+# (drained, down, busy) change constantly, so the cards don't record them. CPU models and local disks
+# come from the ACCESS listings for Bridges-2 RM
+# (https://cider.access-ci.org/public/resources/RDR_000643) and EM
+# (https://cider.access-ci.org/public/resources/RDR_000645).
+#
 #   - AMD Instinct MI210 figures from Lenovo's product guide
 #     (https://lenovopress.lenovo.com/lp1862-amd-instinct-mi210-accelerator);
 #     AMD's own page didn't load when these cards were written.
@@ -116,7 +142,7 @@ To pick a Bridges-2 partition: use RM-shared for a few cores, RM for whole nodes
 The Bridges-2 partitions are RM, RM-shared, RM-512, EM, GPU, and GPU-shared, typed exactly like that with dash p. Run sinfo or slurm dash tool p to see them and how busy they are.
 
 [b2-partition-time-limits] bridges2, time limit, walltime, maximum time, default time, partition, hours
-Every Bridges-2 partition defaults to one hour, so always set dash t. The maximum is 72 hours for RM, RM-shared, and RM-512, 120 hours for EM, and 48 hours for GPU and GPU-shared.
+Every Bridges-2 partition defaults to one hour, so always set dash t. The maximum is 72 hours for RM, RM-shared, and RM-512, 120 hours for EM, and 48 hours for GPU and GPU-shared. sinfo lists every partition's time limit as infinite, but these limits still apply.
 
 [b2-partition-sizes] bridges2, nodes, how many nodes, partition, sizes, hardware, cores
 Bridges-2 has 488 regular memory nodes with 256 gigabytes and 16 with 512 gigabytes, all with 128 cores, plus 4 extreme memory nodes with 96 cores and 4 terabytes each.
@@ -151,7 +177,7 @@ Bridges-2 has 9 V100 16-gigabyte nodes, named v025 to v033. Each has eight V100 
 [b2-gpu-dgx2] bridges2, dgx-2, dgx2, 16 gpus, sixteen gpus, nvidia dgx, v034
 Bridges-2's DGX-2, node v034, has sixteen V100 32-gigabyte GPUs, two 24-core Intel Xeon Platinum 8168 CPUs, which Slurm counts as 96 CPUs because of hyperthreading, and about 1.4 terabytes of memory. Ask for all sixteen GPUs at once with dash dash gpus equals v100 dash 32 colon sixteen.
 
-[b2-gpu-chooser] bridges2, which gpu, choose gpu, pick gpu, gpu memory, model size, cheapest gpu
+[b2-gpu-chooser] bridges2, which gpu, choose gpu, pick gpu, model size, cheapest gpu
 To pick a Bridges-2 GPU, start from how much GPU memory your work needs: 16 gigabytes on V100-16, 32 on V100-32, 48 on L40S, or 80 on H100. H100s cost twice as much per hour, so use them when you need the memory, and remember that the L40S has only 3 nodes while the V100-32 has 23.
 
 [b2-gpu-cpus] bridges2, cpus per gpu, cores per gpu, cpu cores, dataloader, gpu-shared cpus
@@ -191,13 +217,46 @@ The DGX-2's sixteen V100 32-gigabyte GPUs are connected by twelve NVSwitches, so
 Comparing Bridges-2 GPUs by memory bandwidth, which often limits AI work: the H100 moves 3.35 terabytes per second, the V100 900 gigabytes, and the L40S 864 gigabytes. The H100 is also far ahead in FP64, which matters for many simulations.
 
 [b2-other-gpu-partitions] bridges2, other partitions, gpu-small, gpu-dev, robo, robo-8, hacc, a100, mi210, amd, restricted
-sinfo on Bridges-2 also shows GPU partitions the user guide doesn't describe: GPU-small with one V100 node, GPU-dev with one A100 GPU, ROBO and ROBO-8 with six more H100 nodes, and HACC with four nodes of four AMD MI210 GPUs. They're probably reserved for specific projects, so ask PSC before trying to use them.
+sinfo on Bridges-2 also shows GPU partitions the user guide doesn't describe: GPU-small with one V100 node, v001; GPU-dev with one A100 GPU, node a001; ROBO and ROBO-8 with six more H100 nodes, robo-gh001 to robo-gh006; and HACC with four nodes of four AMD MI210 GPUs, hacc-gm001 to hacc-gm004. They're probably reserved for specific projects, so ask PSC before trying to use them.
 
 [b2-gpu-hw-a100] bridges2, a100, ampere, gpu-dev, a100 specs, hardware
 The A100 in Bridges-2's GPU-dev partition is from NVIDIA's Ampere generation; Slurm doesn't say whether it's the 40 or 80 gigabyte model, and nvidia dash smi on the node would tell you. NVIDIA rates the 80 gigabyte A100 at 9.7 teraflops in FP64, 19.5 in FP32, and 312 in BF16 on Tensor Cores, with about 2 terabytes per second of memory bandwidth.
 
 [b2-gpu-hw-mi210] bridges2, mi210, amd, instinct, rocm, hip, hacc, amd gpu, hardware
 The AMD Instinct MI210 GPUs in Bridges-2's HACC partition each have 104 compute units, 64 gigabytes of HBM2e memory at 1.6 terabytes per second, and about 22.6 teraflops in FP64, or 45 with matrix cores. They're AMD GPUs, so programs use ROCm and HIP instead of CUDA.
+
+[b2-cpu-rm-nodes] bridges2, rm, regular memory, cpu nodes, epyc, amd, rome, cores, cpu node hardware
+Bridges-2's regular memory nodes each have two 64-core AMD EPYC 7742 processors, from the Rome generation, so 128 cores, plus about 256 gigabytes of memory and a 3.84-terabyte NVMe disk. On October 24, 2026, sinfo showed 484 of them in the RM partition and 4 more in a small partition called RM-small, which makes the 488 in the user guide.
+
+[b2-cpu-rm512-nodes] bridges2, rm-512, 512, large memory nodes, epyc, cpu node hardware
+Bridges-2's RM-512 nodes have the same two 64-core AMD EPYC 7742 processors as the regular nodes, but about 515 gigabytes of memory. On October 24, 2026, sinfo showed 15 of them in RM-512, where the user guide says 16; the 16th, l001, is in a one-node partition called applications.
+
+[b2-cpu-em-nodes] bridges2, em, extreme memory, xeon, intel, cascade lake, cpu node hardware, 4tb
+Bridges-2's extreme memory nodes each have four 24-core Intel Xeon Platinum 8260M processors, from the Cascade Lake generation, so 96 cores, with about 4 terabytes of memory and a 7.68-terabyte NVMe disk. There are four of them.
+
+[b2-cpu-threads] bridges2, cpus, cores, hyperthreading, threads per core, cpus per task, cpu count
+On Bridges-2's CPU nodes, Slurm counts one CPU per physical core, with no hyperthreads, so 128 CPUs on an RM node really are 128 cores. Ask for them with dash dash ntasks per node or dash dash cpus per task. The DGX-2 GPU node is different: its 96 CPUs include hyperthreads.
+
+[b2-cpu-rm-overlap] bridges2, rm-overlap, rm-shared, rm, shared nodes, perf, feature
+On Bridges-2, the RM and RM-shared partitions share 126 nodes, which carry the Slurm feature RM-overlap. The other regular nodes are only in one partition. Most regular nodes also have a feature called PERF.
+
+[b2-other-cpu-partitions] bridges2, rm-small, applications, login nodes, other partitions, hacc, partitions not in guide
+sinfo on Bridges-2 also lists partitions the user guide doesn't describe: RM-small with 4 regular nodes, r001 to r004; applications with one 512-gigabyte node, l001, and an 8-hour limit; and Login, the 5 login nodes, br011 to br014 and br021, with 256 CPUs each. The HACC partition also has one node without GPUs. Ask PSC before submitting to a partition the guide doesn't mention.
+
+[b2-cpu-node-names] bridges2, node names, r005, l002, e001, which node, nodelist
+On Bridges-2 you can tell a CPU node's type from its name: r nodes are regular memory nodes, r005 to r488 in RM and r001 to r004 in RM-small; l nodes are the 512-gigabyte nodes, l002 to l016 in RM-512; e001 to e004 are the extreme memory nodes; and br nodes are the login nodes.
+
+[b2-cpu-usable-memory] bridges2, mem, memory limit, usable memory, how much memory, 250gb, rm memory
+Slurm lets a job on a Bridges-2 regular memory node use up to 250 gigabytes, a little less than the node's 256, because the rest is kept for the system. RM-512 nodes offer about 515 gigabytes and extreme memory nodes about 4.1 terabytes.
+
+[b2-slurm-version] bridges2, slurm version, version, 22.05, man page, unrecognized option, option not recognized
+Bridges-2 runs Slurm version 22.05, which is older than the latest Slurm documentation, so a few newer options may not exist there. If an option isn't recognized, check man sbatch or sbatch dash dash help on Bridges-2 itself.
+
+[b2-os] bridges2, operating system, linux, os, rhel, enterprise linux, kernel
+Bridges-2's compute nodes run an Enterprise Linux 8.10 kernel, the Red Hat family of Linux, on x86-64 processors.
+
+[b2-cpu-sinfo] bridges2, sinfo, cpu nodes, check nodes, sockets, cores, threads
+To see Bridges-2's CPU nodes yourself, run sinfo for the RM, RM-shared, RM-512, and EM partitions with an output format that includes sockets, cores per socket, and threads per core; scontrol show partition and a partition name shows that partition's limits.
 
 [b2-gpu-partition-example] bridges2, gpu, gpu partition, example, sbatch, multiple nodes, cost
 In the GPU partition on Bridges-2, ask for GPUs in multiples of eight, for example sbatch dash p GPU dash N two dash dash gpus equals v100 dash 16 colon sixteen for two full nodes. A full V100 node for five hours costs 40 SUs, and H100 GPUs cost twice as much.

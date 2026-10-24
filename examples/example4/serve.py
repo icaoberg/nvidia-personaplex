@@ -46,7 +46,7 @@ STOPWORDS = {"a", "an", "and", "the", "to", "of", "for", "with", "in", "on", "i"
              "want", "make", "how", "do", "is", "it", "some", "help", "use", "using", "get",
              "but", "have", "no", "not", "need", "or", "so", "what", "can", "should", "me",
              "about", "learn", "understand", "explain", "why", "does", "are",
-             "run", "running", "across", "there"}
+             "run", "running", "across", "there", "that"}
 NOT_PLURAL = {"l40s"}  # GPU model names that end in "s" but aren't plurals ("h100s" is)
 
 # The persona without facts. {topic} is filled in; retrieved facts follow it.
@@ -149,8 +149,9 @@ def tokenize(text: str) -> list:
     Returns:
         The words, e.g. "Job Arrays on the H100s" -> ["job", "array", "h100"].
     """
-    return [singular(w) for w in re.findall(r"[a-z0-9]+", text.lower())
-            if w not in STOPWORDS and not w.isdigit()]
+    words = [singular(w) for w in re.findall(r"[a-z0-9]+", text.lower())
+             if w not in STOPWORDS and not w.isdigit()]
+    return [w for w in words if w not in STOPWORDS]  # "needs" -> "need" is filler too
 
 
 def load_cards(path: Path) -> list:

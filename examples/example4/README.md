@@ -16,7 +16,7 @@ The example builds the approach that fits PersonaPlex best: **retrieve before th
         │
         ▼
 knowledge/slurm.txt + lmod.txt + bridges2.txt ──BM25──► best fact cards ──► Ivan's persona (≤ 1,500 chars)
-             (116 fact cards)                                                        │
+             (128 fact cards)                                                        │
                                                                                     ▼
                                               browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
 ```
@@ -43,12 +43,12 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
 ## How this example works
 
 1. **Knowledge base:** every `.txt` file in [`knowledge/`](knowledge) is loaded and searched together:
-   - [`slurm.txt`](knowledge/slurm.txt): 32 cards from the Slurm documentation (version 26.05). They cover:
+   - [`slurm.txt`](knowledge/slurm.txt): 33 cards from the Slurm documentation (version 26.05). They cover:
      - concepts and architecture
      - `sbatch` and its directives; time, CPU, memory and GPU requests; partitions and accounts
      - output files, the working directory, and environment variables
      - `srun`, MPI, and interactive sessions with `salloc` and `srun --pty`
-     - `squeue`, pending reasons, job states, `scancel`, `sinfo`, `sacct`, `scontrol`, `sstat`
+     - `squeue`, pending reasons, job states, `scancel`, `sinfo` and its node states, `sacct`, `scontrol`, `sstat`
      - job arrays, dependencies, constraints, email, and `sbcast`
    - [`lmod.txt`](knowledge/lmod.txt): 23 cards from the Lmod documentation (version 9.4.5). They cover:
      - what modules are; `module avail`, `list`, `load`, `unload`, `swap`, `purge` and `reset`
@@ -56,7 +56,7 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
      - the compiler/MPI software hierarchy, the one-version and family rules
      - `module show`, `help`, `whatis` and `keyword`; the `ml` shortcut
      - saving and restoring collections, personal modulefiles with `module use`, the `avail` legend, and startup files
-   - [`bridges2.txt`](knowledge/bridges2.txt): 61 cards about PSC's Bridges-2: from its User Guide (read October 2026), `sinfo` output from the cluster, the ACCESS resource listing, and NVIDIA's GPU specifications. These are site-specific, about one cluster. They cover:
+   - [`bridges2.txt`](knowledge/bridges2.txt): 72 cards about PSC's Bridges-2: from its User Guide (read October 2026), `sinfo` output from the cluster, the ACCESS resource listing, and NVIDIA's GPU specifications. These are site-specific, about one cluster. They cover:
      - the hardware; logging in with SSH or OnDemand; login nodes versus compute nodes
      - file spaces (`$HOME`, `$PROJECT` on Ocean, `$LOCAL`, `$RAMDISK`), quotas, and file retention
      - file transfers through the data transfer node or Globus
@@ -66,6 +66,7 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
      - the GPU nodes, from `sinfo` on 2026-10-24: each type's node names, count, CPUs, memory and Slurm features; which GPU to choose; CPUs per GPU; and how to check the nodes yourself
      - the GPU hardware, from NVIDIA's specifications: H100 SXM5, L40S and V100 core counts, memory and bandwidth, peak FLOPS, BF16/FP8 support (V100 has neither), and the DGX-2's NVSwitch fabric
      - GPU partitions the user guide doesn't describe, found with `sinfo` across all partitions (GPU-small, GPU-dev with an A100, ROBO and ROBO-8 with more H100s, HACC with AMD MI210s), which are probably reserved for specific projects, plus A100 and MI210 specs
+     - the CPU nodes, from `sinfo` and `scontrol show node`: processors (AMD EPYC 7742 on RM and RM-512, Intel Xeon Platinum 8260M on EM), cores with no hyperthreads, usable memory (250 GB on RM nodes), node names, the RM/RM-shared overlap, partitions the guide doesn't describe (RM-small, applications, Login), Bridges-2's Slurm version (22.05) and operating system
 
    Each card is one or two spoken-style sentences, because the model follows its prompt as instructions and says things aloud. So commands are spelled the way an engineer would say them: "dash dash gres equals gpu colon two".
 2. **Retrieval:** [`serve.py`](serve.py) ranks the cards against the topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25), a standard keyword-ranking formula, in pure Python with no extra packages. Each card's keyword line counts double. Filler words ("I", "want", "my", "why") are ignored. Letters and digits stay together, so GPU names like "H100" and "A100" match as words. Simple plurals and "-ing" forms are matched: "dependencies" ↔ "dependency", "loading" ↔ "load".
@@ -88,18 +89,21 @@ Examples of what gets retrieved:
 | `submitting a GPU job on Bridges-2` | sbatch, b2-partition-chooser, b2-login-nodes, b2-ondemand, b2-benchmark | 1,463 |
 | `an interactive session on Bridges-2` | b2-interact, salloc, srun-pty, b2-interact-gpu | 1,483 |
 | `transferring files to Bridges-2` | b2-transfer, b2-globus, b2-retention, sbcast | 1,150 |
-| `where should I store large files on Bridges-2` | b2-project, b2-globus | 999 |
+| `where should I store large files on Bridges-2` | b2-project, b2-cpu-rm512-nodes | 1,156 |
 | `how many SUs do I have left` | b2-projects-command | 721 |
-| `which partition should I use on Bridges-2` | b2-partition-chooser, b2-gpu-hw-compare, b2-partition-names, b2-partition-rm | 1,431 |
-| `what is the maximum time limit on Bridges-2` | b2-partition-time-limits, time-limit, b2-partition-rm, b2-partition-rm-shared | 1,375 |
-| `running a job that needs a lot of memory on Bridges-2` | b2-gpu-chooser, b2-partition-em, b2-gpu-cpus, sstat | 1,465 |
+| `which partition should I use on Bridges-2` | b2-partition-chooser, b2-cpu-rm-overlap, b2-cpu-rm-nodes | 1,410 |
+| `what is the maximum time limit on Bridges-2` | b2-partition-time-limits, time-limit, b2-partition-rm, b2-partition-gpu | 1,457 |
+| `running a job that needs a lot of memory on Bridges-2` | b2-partition-rm512, b2-partition-rm, b2-partition-em, b2-cpu-usable-memory, sstat | 1,447 |
 | `how much does a GPU job cost` | b2-gpu-partition-example, b2-gpu-chooser, b2-gpu-shared-example | 1,407 |
 | `which GPU should I use on Bridges-2` | b2-gpu-hw-compare, b2-gpu-chooser, b2-gpu-types | 1,452 |
-| `how fast are the H100s` | b2-gpu-hw-h100-speed, b2-gpu-h100 | 1,070 |
-| `does the V100 support bf16` | b2-gpu-hw-v100-precision, b2-gpu-hw-h100, b2-gpu-hw-l40s-speed | 1,273 |
+| `how fast are the H100s` | b2-gpu-hw-h100-speed, b2-gpu-h100, b2-gpu-hw-h100 | 1,342 |
+| `does the V100 support bf16` | b2-gpu-hw-v100-precision, b2-gpu-hw-h100, b2-gpu-hw-l40s-speed, b2-gpu-v100-16 | 1,466 |
 | `using the DGX-2` | b2-gpu-hw-dgx2, b2-gpu-dgx2, b2-gpu-nodes | 1,464 |
-| `is there an A100` | b2-gpu-hw-a100, b2-other-gpu-partitions | 1,255 |
-| `AMD GPUs on Bridges-2` | b2-gpu-hw-mi210, b2-other-gpu-partitions | 1,180 |
+| `is there an A100` | b2-gpu-hw-a100, b2-other-gpu-partitions | 1,324 |
+| `what CPUs are in the RM nodes` | b2-cpu-rm-nodes, b2-cpu-sinfo, b2-cpu-rm512-nodes | 1,490 |
+| `how much memory can I ask for on an RM node` | b2-cpu-usable-memory, b2-rm-shared-example, b2-partition-rm512, b2-cpu-rm512-nodes | 1,492 |
+| `what version of Slurm does Bridges-2 run` | b2-slurm-version, one-name-rule, default-version, module-load | 1,384 |
+| `what does drain mean in sinfo` | sinfo-states | 885 |
 | `kubernetes` | none: the knowledge base is about Slurm, Lmod and Bridges-2, so it uses the base persona | 588 |
 
 Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are searched by default, general topics pick up Bridges-2 specifics too: "submitting a GPU batch job" gets Slurm's general GPU card *and* the Bridges-2 partition chooser. That's what a Bridges-2 student wants. For any other cluster, search only the general files: `--knowledge examples/example4/knowledge/slurm.txt examples/example4/knowledge/lmod.txt`.
@@ -110,7 +114,7 @@ Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are
 
 ```
 --topic "submitting a GPU batch job"
-   → tokenize → BM25 ranking over 116 fact cards (all knowledge/*.txt) → best cards
+   → tokenize → BM25 ranking over 128 fact cards (all knowledge/*.txt) → best cards
    → base persona + cards (≤ 1,500 chars) → printed and copied
    → personaplex_mlx.local_web → browser at localhost:8998 (mic in, voice out)
 ```
@@ -120,9 +124,9 @@ Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are
 | File | What it is |
 |---|---|
 | [`README.md`](README.md) | This explanation: why plain RAG doesn't fit, the alternatives, how to run and extend the example, and the live test |
-| [`knowledge/slurm.txt`](knowledge/slurm.txt) | 32 Slurm fact cards, one per paragraph |
+| [`knowledge/slurm.txt`](knowledge/slurm.txt) | 33 Slurm fact cards, one per paragraph |
 | [`knowledge/lmod.txt`](knowledge/lmod.txt) | 23 Lmod fact cards, one per paragraph |
-| [`knowledge/bridges2.txt`](knowledge/bridges2.txt) | 61 Bridges-2 fact cards, one per paragraph, specific to PSC's cluster |
+| [`knowledge/bridges2.txt`](knowledge/bridges2.txt) | 72 Bridges-2 fact cards, one per paragraph, specific to PSC's cluster |
 | [`serve.py`](serve.py) | The program: retrieves cards, builds the persona, and starts the live server |
 
 ### The knowledge files: `knowledge/*.txt`
@@ -249,4 +253,4 @@ This is a small, informal test (one question, three seeds) on the 4-bit MLX mode
 - **The persona length is a tradeoff.** More cards means more facts, but a longer prompt, and possibly a less coherent engineer. 1,500 characters is a starting point, not a tested optimum. Try `--budget 1000` or `--budget 2500` and compare.
 - **Retrieval is keyword-based.** BM25 matches words, not meaning: "GPU" finds the GPU card because "gpu" is in its keywords, but a word that's in no card finds nothing. For larger knowledge bases, embedding search (e.g. a small sentence-embedding model) would catch synonyms, at the cost of an extra dependency.
 - **One topic per session.** To change topics, stop the server and start it again with a new `--topic` (option 2 above).
-- **The knowledge base reflects Slurm 26.05, Lmod 9.4.5, and the Bridges-2 User Guide as of October 2026.** Commands rarely change, but Bridges-2 partitions, limits and SU rates do; PSC was also preparing to move Bridges-2 to a new datacenter. Check the current guide for anything that matters.
+- **The knowledge base reflects Slurm 26.05, Lmod 9.4.5, and the Bridges-2 User Guide as of October 2026.** Bridges-2 itself runs Slurm 22.05.11, so a few options in `slurm.txt` may not exist there; the `b2-slurm-version` card tells students to check `man sbatch` on the cluster. Commands rarely change, but Bridges-2 partitions, limits and SU rates do; PSC was also preparing to move Bridges-2 to a new datacenter. Check the current guide for anything that matters.

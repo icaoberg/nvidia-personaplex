@@ -219,7 +219,7 @@ Measured on an M4 Max: 72 ms per 80 ms audio frame at 4-bit (0.90× real time). 
 
 [`examples/example4/`](examples/example4) asks whether retrieval-augmented generation can make the guide more of an expert, for high-performance computing. Penelope, a student, talks with Ivan, an HPC engineer played by PersonaPlex.
 
-PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 116 fact cards summarized from the [Slurm](https://slurm.schedmd.com/documentation.html) and [Lmod](https://lmod.readthedocs.io/en/latest/) documentation, PSC's [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), the cluster's own `sinfo` output, and NVIDIA's GPU specifications, and they're added to the engineer's persona, which then runs live on your Mac as in example3.
+PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 128 fact cards summarized from the [Slurm](https://slurm.schedmd.com/documentation.html) and [Lmod](https://lmod.readthedocs.io/en/latest/) documentation, PSC's [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), the cluster's own `sinfo` output, and NVIDIA's GPU specifications, and they're added to the engineer's persona, which then runs live on your Mac as in example3.
 
 ```bash
 python examples/example4/serve.py --topic "submitting a GPU batch job"
@@ -320,6 +320,17 @@ GPU hardware, from NVIDIA's specifications. Peak Tensor Core numbers are without
 | FP8 | Yes | Yes | No |
 | GPU interconnect | NVLink, 900 GB/s | PCIe Gen4 only (no NVLink) | NVLink, 300 GB/s (on the v100-32 nodes) |
 | Max power | 700 W | 350 W | 300 W |
+
+CPU nodes, from `sinfo` and `scontrol show node` on 2026-10-24 and the [ACCESS RM](https://cider.access-ci.org/public/resources/RDR_000643) and [EM](https://cider.access-ci.org/public/resources/RDR_000645) listings. They're useful for PersonaPlex's offline CPU mode, though that's slow.
+
+| Partition (node names) | Nodes | CPUs per node | Memory | Notes |
+|---|---|---|---|---|
+| RM (`r005`–`r488`) | 484 | 128: 2 × AMD EPYC 7742, 1 thread per core | 256 GB (250 GB usable by jobs) | 126 nodes are shared with RM-shared |
+| RM-small (`r001`–`r004`) | 4 | 128 | 256 GB | Not in the user guide; with RM, makes the guide's 488 |
+| RM-512 (`l002`–`l016`) | 15 | 128 | ~515 GB | The 16th, `l001`, is in a one-node `applications` partition |
+| EM (`e001`–`e004`) | 4 | 96: 4 × Intel Xeon Platinum 8260M, 1 thread per core | ~4.1 TB | Batch only |
+
+Bridges-2 runs Slurm 22.05.11 on an Enterprise Linux 8.10 kernel. `sinfo` shows every partition's time limit as "infinite", but the user guide's limits still apply.
 
 On the DGX-2 (`v034`), the sixteen V100s are connected by twelve NVSwitches, giving 2.4 TB/s of bisection bandwidth. Sources: NVIDIA's [H100](https://www.nvidia.com/en-us/data-center/h100/) and [L40S](https://www.nvidia.com/en-us/data-center/l40s/) product pages, the [Hopper architecture post](https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/) (core counts), the V100 datasheet (January 2020), and the DGX-2 datasheet (April 2018).
 
