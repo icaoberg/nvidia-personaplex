@@ -1,26 +1,27 @@
 #!/usr/bin/env python
-"""Turn a text conversation into PersonaPlex audio.
+"""Turn a text conversation into PersonaPlex audio on a MacBook Pro M4.
 
 PersonaPlex is speech-to-speech: it listens to audio and answers in audio.
 This script lets you write your side of the conversation as text instead:
 
   1. Read prompts.txt (voice, role prompt, and your lines).
-  2. Speak each of your lines with text-to-speech, leaving a pause after each
+  2. Speak each of your lines with macOS `say`, leaving a pause after each
      one for the agent to answer, and save the result as input.wav.
-  3. Run `python -m moshi.offline` on input.wav.
+  3. Run `python -m moshi.offline` on input.wav, on the Mac's CPU.
   4. Save the agent's audio, its transcript, and a stereo mix of both sides.
 
 Run it inside the `personaplex` conda environment (see ../environment.yml),
 with HF_TOKEN set and the model license accepted on Hugging Face:
 
   python example1/run_example.py
-  python example1/run_example.py --device cpu          # no NVIDIA GPU (slow)
-  python example1/run_example.py --input-only          # only build input.wav
+  python example1/run_example.py --device mps       # Apple GPU (untested upstream)
+  python example1/run_example.py --input-only       # only build input.wav
 """
 
 import argparse
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -32,8 +33,33 @@ import sphn
 
 SAMPLE_RATE = 24000  # PersonaPlex (Mimi) sample rate
 LEAD_IN_SECONDS = 1.0  # silence before the first user turn
+MIN_MEMORY_GB = 24  # ~15 GB of BF16 weights plus macOS and the audio codec
 SPECIAL_TOKENS = {"EPAD", "BOS", "EOS", "PAD"}
 HERE = Path(__file__).resolve().parent
+
+
+def sysctl(name: str) -> str:
+    return subprocess.run(["sysctl", "-n", name], capture_output=True, text=True).stdout.strip()
+
+
+def check_mac():
+    """Require macOS on Apple Silicon; warn if this isn't an M4 or memory is low."""
+    if sys.platform != "darwin" or platform.machine() != "arm64":
+        sys.exit("This example targets a MacBook Pro M4 (macOS on Apple Silicon). "
+                 "On Linux with an NVIDIA GPU, run `python -m moshi.offline` directly; "
+                 "see the main README.")
+    if not shutil.which("say"):
+        sys.exit("macOS `say` command not found.")
+
+    chip = sysctl("machdep.cpu.brand_string")
+    memory_gb = int(sysctl("hw.memsize") or 0) / 2**30
+    print(f"Mac:   {chip}, {memory_gb:.0f} GB unified memory, macOS {platform.mac_ver()[0]}")
+    if "M4" not in chip:
+        print(f"Warning: written for an M4; this is {chip!r}. Continuing.", file=sys.stderr)
+    if memory_gb < MIN_MEMORY_GB:
+        print(f"Warning: {memory_gb:.0f} GB of memory is below the ~{MIN_MEMORY_GB} GB "
+              "PersonaPlex needs; expect heavy swapping or an out-of-memory failure.",
+              file=sys.stderr)
 
 
 def parse_prompts(path: Path) -> dict:
@@ -73,28 +99,13 @@ def parse_prompts(path: Path) -> dict:
     return {"voice": voice, "role": " ".join(role_lines), "turns": turns}
 
 
-def pick_tts(requested: str) -> str:
-    """Choose a text-to-speech command: macOS `say` or `espeak-ng`."""
-    candidates = ["say", "espeak-ng"] if requested == "auto" else [requested]
-    for name in candidates:
-        if shutil.which(name):
-            return name
-    sys.exit(
-        "No text-to-speech command found. Install espeak-ng "
-        "(apt install espeak-ng / dnf install espeak-ng / brew install espeak-ng), "
-        "or use 'audio:' lines with recorded WAV files."
-    )
-
-
-def synthesize(text: str, tts: str, workdir: Path, index: int) -> Path:
-    """Speak `text` into a WAV file with the chosen TTS command."""
+def synthesize(text: str, say_voice: str, workdir: Path, index: int) -> Path:
+    """Speak `text` into a 24 kHz WAV file with macOS `say`."""
     wav = workdir / f"turn{index:02d}.wav"
-    if tts == "say":
-        cmd = ["say", "-o", str(wav), "--file-format=WAVE",
-               f"--data-format=LEI16@{SAMPLE_RATE}", text]
-    else:
-        cmd = ["espeak-ng", "-w", str(wav), text]
-    subprocess.run(cmd, check=True)
+    cmd = ["say", "-o", str(wav), "--file-format=WAVE", f"--data-format=LEI16@{SAMPLE_RATE}"]
+    if say_voice:
+        cmd += ["-v", say_voice]
+    subprocess.run(cmd + [text], check=True)
     return wav
 
 
@@ -109,14 +120,14 @@ def silence(seconds: float) -> np.ndarray:
     return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
 
 
-def build_input(turns: list, tts: str) -> np.ndarray:
+def build_input(turns: list, say_voice: str) -> np.ndarray:
     """Concatenate the user's turns, each followed by its pause."""
     pieces = [silence(LEAD_IN_SECONDS)]
     with tempfile.TemporaryDirectory() as tmp:
         for i, turn in enumerate(turns):
             if turn["kind"] == "text":
-                print(f"  [tts]   {turn['value']}")
-                wav = synthesize(turn["value"], tts, Path(tmp), i)
+                print(f"  [say]   {turn['value']}")
+                wav = synthesize(turn["value"], say_voice, Path(tmp), i)
             else:
                 print(f"  [audio] {turn['value']}")
                 wav = turn["value"]
@@ -138,10 +149,12 @@ def run_personaplex(args, prompts: dict, input_wav: Path, agent_wav: Path, agent
     ]
     if prompts["role"]:
         cmd += ["--text-prompt", prompts["role"]]
-    if args.cpu_offload:
-        cmd.append("--cpu-offload")
-    print("Running:", " ".join(cmd[:3]), "...")
-    subprocess.run(cmd, check=True)
+    env = dict(os.environ)
+    if args.device == "mps":
+        # Run ops that MPS doesn't implement on the CPU instead of failing.
+        env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    print(f"Running moshi.offline on {args.device}. On a Mac this takes a while.")
+    subprocess.run(cmd, check=True, env=env)
 
 
 def write_transcript(agent_json: Path, transcript: Path) -> str:
@@ -168,17 +181,16 @@ def main():
                         help="Prompts file (default: example1/prompts.txt)")
     parser.add_argument("--out-dir", default=HERE / "output", type=Path,
                         help="Where to write results (default: example1/output)")
-    parser.add_argument("--device", default="cuda",
-                        help="cuda (default), cpu, or mps (untested)")
-    parser.add_argument("--cpu-offload", action="store_true",
-                        help="Offload model layers to CPU (needs accelerate)")
+    parser.add_argument("--device", default="cpu", choices=["cpu", "mps"],
+                        help="cpu (default) or mps, the Apple GPU (untested upstream)")
     parser.add_argument("--seed", type=int, default=42424242)
-    parser.add_argument("--tts", default="auto", choices=["auto", "say", "espeak-ng"],
-                        help="Text-to-speech command (default: say on macOS, else espeak-ng)")
+    parser.add_argument("--say-voice", default="",
+                        help="macOS voice for your lines, e.g. Samantha (see `say -v '?'`)")
     parser.add_argument("--input-only", action="store_true",
                         help="Only build input.wav; don't run the model")
     args = parser.parse_args()
 
+    check_mac()
     prompts = parse_prompts(args.prompts)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     input_wav = args.out_dir / "input.wav"
@@ -188,8 +200,7 @@ def main():
     print(f"Voice: {prompts['voice']}")
     print(f"Role:  {prompts['role'] or '(upstream default)'}")
     print(f"Building {input_wav} from {len(prompts['turns'])} user turns:")
-    needs_tts = any(t["kind"] == "text" for t in prompts["turns"])
-    user = build_input(prompts["turns"], pick_tts(args.tts) if needs_tts else "")
+    user = build_input(prompts["turns"], args.say_voice)
     sphn.write_wav(str(input_wav), user, SAMPLE_RATE)
     print(f"Wrote {input_wav} ({len(user) / SAMPLE_RATE:.1f} s)")
 

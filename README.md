@@ -14,7 +14,7 @@ PersonaPlex (`nvidia/personaplex-7b-v1`) is an open, real-time, **full-duplex sp
 - [Installation](#installation)
 - [Running the live server (web UI)](#running-the-live-server-web-ui)
 - [Offline inference (WAV in, WAV out)](#offline-inference-wav-in-wav-out)
-- [Example: text prompts to audio](#example-text-prompts-to-audio)
+- [Example: text prompts to audio (MacBook Pro M4)](#example-text-prompts-to-audio-macbook-pro-m4)
 - [Choosing a persona](#choosing-a-persona)
 - [Hardware and GPU compatibility](#hardware-and-gpu-compatibility)
 - [License](#license)
@@ -155,9 +155,9 @@ For offline evaluation without a GPU, install CPU-only PyTorch and add `--device
 | `--output-text <file>` | offline | Output transcript (JSON) |
 | `--seed <int>` | offline | Random seed for reproducibility |
 
-### Example: text prompts to audio
+### Example: text prompts to audio (MacBook Pro M4)
 
-[`example1/`](example1) lets you write your side of a conversation as text in [`prompts.txt`](example1/prompts.txt). Your lines are spoken with text-to-speech, run through PersonaPlex, and the agent's reply is saved as audio with a transcript. Run from the root of this repository:
+[`example1/`](example1) is for a **MacBook Pro M4**. You write your side of a conversation as text in [`prompts.txt`](example1/prompts.txt). Your lines are spoken with macOS `say`, run through PersonaPlex on the Mac's CPU, and the agent's reply is saved as audio with a transcript. Run from the root of this repository:
 
 ```bash
 python example1/run_example.py

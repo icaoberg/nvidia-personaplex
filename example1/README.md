@@ -1,9 +1,9 @@
-# Example 1: Text prompts to audio
+# Example 1: Text prompts to audio on a MacBook Pro M4
 
-PersonaPlex is speech-to-speech: it listens to audio and answers in audio. This example lets you write **your side of the conversation as text**. The script speaks your lines with text-to-speech, feeds them to PersonaPlex, and saves what the agent says back.
+PersonaPlex is speech-to-speech: it listens to audio and answers in audio. This example lets you write **your side of the conversation as text** on a Mac. The script speaks your lines with macOS `say`, feeds them to PersonaPlex running on the Mac's CPU, and saves what the agent says back.
 
 ```
-prompts.txt ──► text-to-speech ──► input.wav ──► moshi.offline ──► agent.wav + transcript.txt
+prompts.txt ──► macOS say ──► input.wav ──► moshi.offline (CPU) ──► agent.wav + transcript.txt
 ```
 
 ## Files
@@ -15,13 +15,31 @@ prompts.txt ──► text-to-speech ──► input.wav ──► moshi.offline
 
 ## Requirements
 
-- The `personaplex` conda environment from [`../environment.yml`](../environment.yml).
-- `HF_TOKEN` exported, with the [model license](https://huggingface.co/nvidia/personaplex-7b-v1) accepted.
-- A text-to-speech command:
-  - **macOS:** `say` (built in)
-  - **Linux:** `espeak-ng` (`sudo apt install espeak-ng` or `sudo dnf install espeak-ng`)
-  - **Neither:** use `audio:` lines with your own recordings instead.
-- A GPU. See [Hardware and GPU compatibility](../README.md#hardware-and-gpu-compatibility). On a Mac or without a GPU, add `--device cpu`, which is slow.
+- **A MacBook Pro M4** (M4, M4 Pro or M4 Max) on macOS. The script stops on anything other than macOS on Apple Silicon, and warns, but continues, on non-M4 chips.
+- **24 GB of unified memory or more.** The BF16 weights alone are ~15 GB. On a 16 GB Mac the script warns that it will likely swap heavily or run out of memory. 36–48 GB is comfortable.
+- **About 20 GB of free disk space** for the model download, in the Hugging Face cache (`~/.cache/huggingface`).
+- **The `personaplex` conda environment** from [`../environment.yml`](../environment.yml). It includes `libopus`, so there's no need for `brew install opus`.
+- **`HF_TOKEN`** exported, with the [model license](https://huggingface.co/nvidia/personaplex-7b-v1) accepted.
+
+## Setup
+
+From the root of this repository:
+
+```bash
+git submodule update --init --recursive
+```
+
+```bash
+conda env create -f environment.yml
+```
+
+```bash
+conda activate personaplex
+```
+
+```bash
+export HF_TOKEN=<YOUR_HUGGINGFACE_TOKEN>
+```
 
 ## Writing prompts
 
@@ -32,7 +50,7 @@ Each line of `prompts.txt` is `key: value`. Lines starting with `#` are comments
 | `voice:` | Agent voice: `NATF0`–`NATF3`, `NATM0`–`NATM3`, `VARF0`–`VARF4`, `VARM0`–`VARM4` |
 | `role:` | Role prompt. Use several `role:` lines for a long prompt; they're joined with spaces. |
 | `pause:` | Seconds of silence after each following user turn, which is the agent's time to answer. You can change it between turns. |
-| `user:` | A line you say, spoken with text-to-speech |
+| `user:` | A line you say, spoken with macOS `say` |
 | `audio:` | A line you say, from a WAV file instead (path relative to `prompts.txt`) |
 
 Example:
@@ -47,25 +65,30 @@ user: That sounds great. Where did you learn to make it?
 
 ## Running
 
-From the root of this repository:
+Check your prompts first. This only builds `input.wav`, takes seconds, and needs no model:
 
 ```bash
-conda activate personaplex
+python example1/run_example.py --input-only
 ```
+
+```bash
+open example1/output/input.wav
+```
+
+Then run the model on the CPU:
 
 ```bash
 python example1/run_example.py
 ```
 
-Useful options:
+Options:
 
 | Option | Effect |
 |---|---|
 | `my_prompts.txt` (positional) | Use a different prompts file |
-| `--device cpu` | Run without an NVIDIA GPU (slow) |
-| `--cpu-offload` | Offload model layers to CPU on small GPUs |
-| `--input-only` | Only build `input.wav`, to check your prompts without running the model |
-| `--tts espeak-ng` | Force a text-to-speech command |
+| `--device mps` | Try the Apple GPU. Untested upstream; it sets `PYTORCH_ENABLE_MPS_FALLBACK=1` so unsupported ops fall back to the CPU. |
+| `--say-voice NAME` | macOS voice for your lines, e.g. `Samantha`. List voices with `say -v '?'`. |
+| `--input-only` | Only build `input.wav`, without running the model |
 | `--seed N` | Random seed (default `42424242`) |
 | `--out-dir DIR` | Output folder (default `example1/output`) |
 
@@ -80,6 +103,20 @@ Everything goes to `example1/output/`, which git ignores:
 | `conversation.wav` | Stereo mix to listen to both sides: you on the left, the agent on the right |
 | `transcript.txt` | What the agent said, as text |
 | `agent.json` | The agent's raw text tokens from `moshi.offline` |
+
+Listen with:
+
+```bash
+open example1/output/conversation.wav
+```
+
+## What to expect on an M4
+
+- **It's slow.** The official code is built for NVIDIA GPUs, and the Mac runs it on the CPU. Processing takes much longer than the length of `input.wav`. This is offline batch processing, not a live conversation.
+- **The first run downloads the model** from Hugging Face. Later runs use the cache.
+- **The Apple GPU (`--device mps`) is experimental.** Upstream turned automatic MPS support off. It may fail with unsupported-operation errors, or run no faster than the CPU. If it errors, go back to the default CPU.
+- **Shorter is faster.** Fewer turns and shorter `pause:` values mean less audio to process.
+- **For live conversation, use an NVIDIA GPU.** See [PSC Bridges-2 GPUs](../README.md#psc-bridges-2-gpus).
 
 ## Tips
 
