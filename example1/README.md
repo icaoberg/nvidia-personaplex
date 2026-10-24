@@ -10,7 +10,7 @@ prompts.txt ──► macOS say ──► input.wav ──► moshi.offline (CPU
 
 | File | Purpose |
 |---|---|
-| [`prompts.txt`](prompts.txt) | The conversation: agent voice, role prompt, and your lines |
+| [`prompts.txt`](prompts.txt) | The conversation: agent voice, role prompt, and your lines. The included scenario is a graduate student asking a [HuBMAP](https://portal.hubmapconsortium.org/) data guide how to find public datasets for computational biology, with 5-second pauses for the answers. |
 | [`run_example.py`](run_example.py) | Builds the input audio, runs PersonaPlex, writes the results |
 
 ## Requirements

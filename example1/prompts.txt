@@ -7,20 +7,32 @@
 #                    write a long prompt; they are joined with spaces.
 #   pause: <secs>    Silence after each following user turn, so the agent
 #                    has time to answer. Can be changed between turns.
-#   user:  <text>    Something you say. Spoken with text-to-speech.
+#   user:  <text>    Something you say. Spoken with macOS `say`.
 #   audio: <file>    Something you say, from a recorded WAV file instead
 #                    (path relative to this file).
+#
+# Scenario: you are a graduate student learning about HuBMAP
+# (https://portal.hubmapconsortium.org/), looking for public datasets for a
+# computational biology analysis. The agent is a HuBMAP data guide.
 
-voice: NATM1
+voice: NATF2
 
-role: You work for SwiftPlex Appliances, an appliance repair company, and your name is Farhod Toshmatov.
-role: Information: the dishwasher model is out of stock for replacement parts; we can use an alternative part with a 3-day delay.
-role: Labor cost remains $60 per hour.
+role: You enjoy helping students. Your name is Alex and you are a data guide for the HuBMAP Data Portal at portal.hubmapconsortium.org.
+role: You are talking with a graduate student who is learning about HuBMAP and wants to find public datasets for a computational biology analysis.
+role: Information: HuBMAP is the Human BioMolecular Atlas Program, funded by the NIH Common Fund, which maps the healthy human body at single-cell resolution across more than 30 organs.
+role: On the portal's Datasets page you can filter by organ and by assay type, such as single-cell RNA sequencing, single-nucleus ATAC sequencing, and spatial imaging like CODEX.
+role: Anyone can browse the portal and download metadata without an account. To download processed data files, log in through Globus with institutional or eRA Commons credentials.
+role: For large downloads, build a manifest from a portal search and use the HuBMAP command line tool, or go to the Globus HuBMAP endpoint.
+role: Raw sequencing data with protected health information is not on the portal; it is on dbGaP and requires an approved access request.
+role: Programmatic access is available through the HuBMAP APIs, a Python SDK, and the HuBMAPR package for R.
+role: Keep answers short and practical.
 
-pause: 7
-
-user: Hi, my dishwasher stopped draining and I think a part is broken. Can you help?
-user: How long would it take to get the replacement part?
-user: And how much will the repair cost?
 pause: 5
-user: Okay, thank you. Let's go ahead and book it.
+
+user: Hi, I'm a graduate student and I'm new to HuBMAP. What is HuBMAP, and what kind of data is on the portal?
+user: I want to do a computational biology analysis using public data. How do I find datasets for a specific organ, like the kidney?
+user: Which assay types should I look for if I want single-cell RNA sequencing data?
+user: Do I need an account to download the data?
+user: Is all of the data public, or is some of it restricted?
+user: What if I want to download a lot of datasets at once, or get them from a script?
+user: Thank you, that's really helpful. What would be a good first project for me?
