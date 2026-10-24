@@ -1,0 +1,104 @@
+# Bridges-2 knowledge base for example4: one fact card per paragraph.
+#
+# Format: the first line of a card is "[id] keywords, ...". The lines after
+# it are the card's text, which is copied into the engineer's prompt when the
+# card is retrieved. Cards are separated by a blank line; lines starting with
+# "#" are comments. Write each card as one or two spoken-style sentences: the
+# model reads them as instructions, not as a document. Card ids must be unique
+# across all files in knowledge/.
+#
+# Source: the Bridges-2 User Guide, Pittsburgh Supercomputing Center
+# (https://www.psc.edu/resources/bridges-2/user-guide/), read October 2026.
+# The facts are summarized in our own words. Partitions, limits, and SU rates
+# change over time, so check the guide for current values. Where the guide
+# contradicts itself (interact's default partition is given as RM-shared in
+# the text and as RM-small in its options table), the cards follow the text.
+# These cards are site-specific: they apply to Bridges-2, while slurm.txt and
+# lmod.txt cover Slurm and Lmod in general.
+
+[b2-overview] bridges2, bridges, psc, pittsburgh, system, nodes, hardware, what is bridges
+Bridges-2 is the supercomputer at the Pittsburgh Supercomputing Center, PSC. It has regular memory nodes with 128 cores and 256 gigabytes, a few with 512 gigabytes, extreme memory nodes with 96 cores and 4 terabytes, and GPU nodes with eight GPUs each.
+
+[b2-connect] bridges2, ssh, login, connect, log in, password, keys
+To log in to Bridges-2, ssh to bridges2 dot psc dot edu with your PSC username and PSC password; you set the password at apr dot psc dot edu. You can also log in with SSH keys after registering them with PSC.
+
+[b2-ondemand] bridges2, ondemand, browser, web, jupyter, portal
+You can also use Bridges-2 from a web browser through OnDemand, at ondemand dot bridges2 dot psc dot edu. You can't submit extreme memory, EM, jobs from OnDemand.
+
+[b2-login-nodes] bridges2, login node, compute node, production, rules
+On Bridges-2, the login nodes are for managing files, submitting batch jobs, and starting interactive sessions. Run real work on the compute nodes, through Slurm.
+
+[b2-home] bridges2, home, home directory, storage, store, space, quota, backup, jet, my_quotas
+Your Bridges-2 home directory is slash jet slash home slash your username. It holds 25 gigabytes and is backed up daily. Run my underscore quotas to check how much space you're using.
+
+[b2-project] bridges2, project, ocean, storage, store, where to store, large files, space, quota, inode, project space
+For larger files, use your project space on the Ocean file system, slash ocean slash projects slash your group slash your username, also called dollar PROJECT. It isn't backed up, and if your group goes over its storage quota, you can't submit jobs.
+
+[b2-local-ramdisk] bridges2, local, ramdisk, scratch, temporary, fast disk
+Inside a Bridges-2 job, dollar LOCAL is scratch space on the node's own disk and dollar RAMDISK is scratch space in memory. Both are deleted when the job ends, so copy results back to your project space first.
+
+[b2-retention] bridges2, allocation expires, retention, files deleted, expire
+On Bridges-2, your files are kept for three months after your allocation expires.
+
+[b2-transfer] bridges2, transfer, copy files, upload, download, rsync, scp, sftp, data transfer node
+To move files to or from Bridges-2, start rsync, scp, or sftp from your own computer and connect to the data transfer node, data dot bridges2 dot psc dot edu, using full paths on the Bridges-2 side.
+
+[b2-globus] bridges2, globus, transfer, large transfers, endpoint
+For large transfers you can use Globus. The Bridges-2 endpoint is called PSC Bridges-2 slash ocean and slash jet filesystems.
+
+[b2-projects-command] bridges2, projects, allocation, balance, sus left, usage, allocation id
+On Bridges-2, run projects to see your allocations, how many service units each has left, and their allocation IDs.
+
+[b2-su-charging] bridges2, su, service units, charge, cost, billing, core hour, gpu hour
+Bridges-2 charges in service units, or SUs. On regular and extreme memory nodes, one core-hour is one SU, so a full 128-core regular node for an hour is 128 SUs. On GPUs, one GPU-hour is one SU for V100 and L40S GPUs, and two SUs for H100 GPUs.
+
+[b2-whole-node-charge] bridges2, charge, whole node, rm, em, cores
+In the RM, RM-512, and EM partitions, Bridges-2 charges for all the cores on the nodes you get, whether or not you use them. To pay only for the cores you use on part of a node, use RM-shared.
+
+[b2-allocation-flag] bridges2, allocation, account, charge, default allocation, change_primary_group
+If you have more than one allocation on Bridges-2, choose which one a job charges with dash A and the allocation ID, in sbatch or interact. To change your default, run change underscore primary underscore group with the ID; it can take about an hour, and you need to log out and back in.
+
+[b2-partition-rm] bridges2, rm, regular memory, partition, whole node, cpu job, mpi
+The RM partition on Bridges-2 gives you whole regular memory nodes, up to 64 nodes per job. The default time is one hour and the maximum is 72 hours.
+
+[b2-partition-rm-shared] bridges2, rm-shared, shared, partial node, small job, few cores, serial
+The RM-shared partition on Bridges-2 gives you part of one node, from 1 to 64 cores, with 2 gigabytes of memory per core. The default is one core for one hour, and the maximum time is 72 hours.
+
+[b2-partition-rm512] bridges2, rm-512, more memory, 512, large memory
+The RM-512 partition on Bridges-2 has nodes with 512 gigabytes of memory, up to two nodes per job, for at most 72 hours.
+
+[b2-partition-em] bridges2, em, extreme memory, 4tb, terabyte, huge memory
+The EM partition on Bridges-2 is for jobs that need huge memory: you ask for 24 to 96 cores, in multiples of 24, and get about one terabyte of memory per 24 cores, for up to 120 hours. You can't run interactive sessions there.
+
+[b2-partition-gpu] bridges2, gpu, gpu partition, whole gpu node, multi gpu, deep learning
+The GPU partition on Bridges-2 gives you whole GPU nodes, so ask for GPUs in multiples of eight, up to 64 GPUs per job. The default is one node for one hour, and the maximum time is 48 hours.
+
+[b2-partition-gpu-shared] bridges2, gpu-shared, one gpu, few gpus, shared gpu, partial gpu node
+The GPU-shared partition on Bridges-2 gives you part of one GPU node, up to four GPUs, and you're charged only for the GPUs you use. The default is one GPU for one hour, and the maximum time is 48 hours.
+
+[b2-gpu-types] bridges2, gpu, gpu type, h100, l40s, v100, gpus, gres, which gpu
+Bridges-2 GPU types are h100 dash 80, l40s dash 48, v100 dash 32, and v100 dash 16. In a batch job, ask with dash dash gpus equals type colon count, for example dash p GPU dash shared with dash dash gpus equals l40s dash 48 colon one; in an interactive session, use dash dash gres equals gpu colon type colon count.
+
+[b2-interact] bridges2, interact, interactive, interactive session, compute node, debug
+On Bridges-2, start an interactive session with the interact command. By default it gives you one core in RM-shared for one hour; change it with dash p for the partition, dash t for the time, up to eight hours, and dash dash ntasks per node for cores.
+
+[b2-interact-gpu] bridges2, interact, gpu, interactive gpu, test gpu
+For an interactive GPU session on Bridges-2, add the partition and GPUs to interact, for example interact dash p GPU dash shared dash dash gres equals gpu colon v100 dash 32 colon four dash t thirty colon zero zero.
+
+[b2-slurm-tool] bridges2, slurm-tool, showuserjobs, job_info, monitor, my jobs, queue
+Bridges-2 adds its own helpers: slurm dash tool q shows the queue, slurm dash tool p the partitions, and slurm dash tool h your job history; showuserjobs and job underscore info with a job ID give more detail.
+
+[b2-modules] bridges2, module, cuda, nvhpc, compilers, software, ai, pytorch, tensorflow
+On Bridges-2, software comes as modules: for example module load cuda for CUDA, or module load nvhpc for the NVIDIA compilers. Run module spider AI to see the ready-made AI environments, and module help with one of them for details.
+
+[b2-datasets] bridges2, datasets, imagenet, coco, mnist, alphafold, community data, ocean datasets
+Bridges-2 has public datasets anyone with an account can use, in slash ocean slash datasets slash community, including ImageNet, COCO, CIFAR-10, MNIST, and AlphaFold, so you don't need to download your own copy.
+
+[b2-help] bridges2, help, support, ticket, email, contact, psc help
+For Bridges-2 help, email help at psc dot edu, or call PSC at 412 268 4960.
+
+[b2-acknowledge] bridges2, acknowledge, cite, citation, paper, publication, access
+If you publish work done on Bridges-2, cite the Bridges-2 paper by Brown and others from PEARC 2021, and include PSC's acknowledgment text for your funding program, such as ACCESS, with your allocation number.
+
+[b2-benchmark] bridges2, benchmark, timing, performance, exclusive, scaling
+For benchmarking on Bridges-2, use the RM, RM-512, or GPU partitions, so no other jobs share your nodes.

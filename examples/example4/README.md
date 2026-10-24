@@ -4,7 +4,10 @@ Can retrieval-augmented generation (RAG) make PersonaPlex's guide more of an exp
 - **Penelope,** a student learning to use a cluster.
 - **Ivan,** an HPC engineer, played by PersonaPlex.
 
-Ivan's expertise comes from a knowledge base summarized from the [Slurm](https://slurm.schedmd.com/documentation.html) and [Lmod](https://lmod.readthedocs.io/en/latest/) documentation: Slurm for running jobs, Lmod for loading software.
+Ivan's expertise comes from a knowledge base summarized from three sources:
+- the [Slurm](https://slurm.schedmd.com/documentation.html) documentation, for running jobs
+- the [Lmod](https://lmod.readthedocs.io/en/latest/) documentation, for loading software
+- the [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), for the specifics of PSC's Bridges-2 supercomputer
 
 The example builds the approach that fits PersonaPlex best: **retrieve before the conversation, then prompt**. Penelope says what they need help with. The script picks the most relevant facts, builds Ivan's persona from them, and starts the live web page from [example3](../example3), running on your Mac.
 
@@ -12,10 +15,10 @@ The example builds the approach that fits PersonaPlex best: **retrieve before th
 --topic "submitting a GPU batch job"
         │
         ▼
-knowledge/slurm.txt + knowledge/lmod.txt ──BM25──► best fact cards ──► Ivan's persona (≤ 1,500 chars)
-           (55 fact cards)                                                     │
-                                                                               ▼
-                                         browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
+knowledge/slurm.txt + lmod.txt + bridges2.txt ──BM25──► best fact cards ──► Ivan's persona (≤ 1,500 chars)
+             (84 fact cards)                                                        │
+                                                                                    ▼
+                                              browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
 ```
 
 ## Why plain RAG doesn't drop in
@@ -53,6 +56,13 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
      - the compiler/MPI software hierarchy, the one-version and family rules
      - `module show`, `help`, `whatis` and `keyword`; the `ml` shortcut
      - saving and restoring collections, personal modulefiles with `module use`, the `avail` legend, and startup files
+   - [`bridges2.txt`](knowledge/bridges2.txt): 29 cards from PSC's Bridges-2 User Guide (read October 2026). These are site-specific, about one cluster. They cover:
+     - the hardware; logging in with SSH or OnDemand; login nodes versus compute nodes
+     - file spaces (`$HOME`, `$PROJECT` on Ocean, `$LOCAL`, `$RAMDISK`), quotas, and file retention
+     - file transfers through the data transfer node or Globus
+     - allocations, `projects`, service-unit charging, and `-A` / `change_primary_group`
+     - each partition (RM, RM-shared, RM-512, EM, GPU, GPU-shared) with its limits, GPU types and how to request them
+     - `interact`, PSC's `slurm-tool`, Bridges-2 modules, community datasets, getting help, and acknowledgments
 
    Each card is one or two spoken-style sentences, because the model follows its prompt as instructions and says things aloud. So commands are spelled the way an engineer would say them: "dash dash gres equals gpu colon two".
 2. **Retrieval:** [`serve.py`](serve.py) ranks the cards against the topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25), a standard keyword-ranking formula, in pure Python with no extra packages. Each card's keyword line counts double. Filler words ("I", "want", "my", "why") are ignored. Simple plurals and "-ing" forms are matched: "dependencies" ↔ "dependency", "loading" ↔ "load".
@@ -63,16 +73,24 @@ Examples of what gets retrieved:
 
 | Topic | Cards retrieved | Persona length |
 |---|---|---|
-| `submitting a GPU batch job` | sbatch, working-directory, gpus | 1,176 |
+| `submitting a GPU batch job` | sbatch, working-directory, b2-gpu-types, b2-login-nodes | 1,426 |
 | `why is my job pending` | squeue, pending-reasons | 1,102 |
 | `job arrays and dependencies` | job-arrays, dependencies, scancel, array-limits | 1,482 |
-| `my job ran out of memory` | memory, sstat, sacct, output-files | 1,381 |
-| `interactive session on a compute node` | salloc, srun-pty | 1,017 |
-| `loading a compiler module` | hierarchy, families, spider-prerequisites, module-swap, module-reset | 1,423 |
-| `module not found` | module-spider, module-use | 1,070 |
-| `saving my modules so they load every time` | startup-files, collections-restore, collections-save, module-load | 1,399 |
-| `loading Python and submitting a batch job` | sbatch, working-directory, module-avail (Slurm and Lmod together) | 1,088 |
-| `kubernetes` | none: the knowledge base is about Slurm and Lmod, so it uses the base persona | 588 |
+| `my job ran out of memory` | memory, output-files, b2-partition-rm512, working-directory, sstat | 1,438 |
+| `interactive session on a compute node` | salloc, srun-pty, b2-interact, b2-login-nodes | 1,432 |
+| `loading a compiler module` | hierarchy, b2-modules, spider-prerequisites, families | 1,455 |
+| `module not found` | module-spider, module-use, module-list | 1,131 |
+| `saving my modules so they load every time` | startup-files, collections-restore, collections-save, module-load, module-reset | 1,479 |
+| `loading Python and submitting a batch job` | sbatch, working-directory, b2-login-nodes, module-avail (all three files) | 1,251 |
+| `submitting a GPU job on Bridges-2` | b2-partition-gpu, b2-gpu-types, b2-partition-gpu-shared, b2-benchmark | 1,428 |
+| `an interactive session on Bridges-2` | b2-interact, salloc, srun-pty, b2-interact-gpu | 1,483 |
+| `transferring files to Bridges-2` | b2-transfer, b2-globus, b2-retention, b2-project | 1,266 |
+| `where should I store large files on Bridges-2` | b2-project, b2-globus | 999 |
+| `how many SUs do I have left` | b2-projects-command | 721 |
+| `which partition for a small serial job` | b2-partition-rm-shared, job-steps | 1,002 |
+| `kubernetes` | none: the knowledge base is about Slurm, Lmod and Bridges-2, so it uses the base persona | 588 |
+
+Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are searched by default, general topics pick up Bridges-2 specifics too: "submitting a GPU batch job" now gets PSC's GPU types instead of the general Slurm GPU card. That's what a Bridges-2 student wants. For any other cluster, search only the general files: `--knowledge examples/example4/knowledge/slurm.txt examples/example4/knowledge/lmod.txt`.
 
 ## The pieces
 
@@ -80,7 +98,7 @@ Examples of what gets retrieved:
 
 ```
 --topic "submitting a GPU batch job"
-   → tokenize → BM25 ranking over 55 fact cards (all knowledge/*.txt) → best cards
+   → tokenize → BM25 ranking over 84 fact cards (all knowledge/*.txt) → best cards
    → base persona + cards (≤ 1,500 chars) → printed and copied
    → personaplex_mlx.local_web → browser at localhost:8998 (mic in, voice out)
 ```
@@ -92,6 +110,7 @@ Examples of what gets retrieved:
 | [`README.md`](README.md) | This explanation: why plain RAG doesn't fit, the alternatives, how to run and extend the example, and the live test |
 | [`knowledge/slurm.txt`](knowledge/slurm.txt) | 32 Slurm fact cards, one per paragraph |
 | [`knowledge/lmod.txt`](knowledge/lmod.txt) | 23 Lmod fact cards, one per paragraph |
+| [`knowledge/bridges2.txt`](knowledge/bridges2.txt) | 29 Bridges-2 fact cards, one per paragraph, specific to PSC's cluster |
 | [`serve.py`](serve.py) | The program: retrieves cards, builds the persona, and starts the live server |
 
 ### The knowledge files: `knowledge/*.txt`
@@ -108,7 +127,7 @@ module spider searches every module on the system, including ones that module av
 
 - **First line:** `[id]` followed by keywords. The keywords are what retrieval matches against most strongly. Ids must be unique across all the files; `serve.py` stops with an error if two cards share one.
 - **Body:** exactly what Ivan is told when the card is retrieved. It's written as one or two spoken-style sentences, with commands spelled out as they're said aloud.
-- **Site-specific settings:** partition names, accounts, GPU types, which modules exist, default versions, and the letters in `module avail` all differ from cluster to cluster. Those cards tell the student to check their site's settings (`sinfo`, the `module avail` legend, the site documentation) instead of guessing.
+- **Site-specific settings:** partition names, accounts, GPU types, which modules exist, default versions, and the letters in `module avail` all differ from cluster to cluster. In `slurm.txt` and `lmod.txt`, those cards tell the student to check their site's settings (`sinfo`, the `module avail` legend, the site documentation) instead of guessing. `bridges2.txt` *is* site documentation: its cards name Bridges-2 in every sentence, so the engineer doesn't present PSC's settings as universal.
 - **Source:** the top of each file cites its documentation, version, and the pages used. The facts are summarized in our own words, not copied.
 - **Formatting:** blank lines separate cards, and lines starting with `#` are comments.
 
@@ -148,7 +167,7 @@ These are BM25's standard parameter values. It's pure Python, with no extra pack
 | [`nvidia/personaplex-7b-v1`](https://huggingface.co/nvidia/personaplex-7b-v1) on Hugging Face | NVIDIA's model weights, the voice prompts, and the web page itself. They download on first use and are cached in `~/.cache/huggingface`. |
 | The browser page | Where the student pastes the persona into **Text Prompt**, picks **Voice** `NATURAL_F2`, clicks **Connect**, and talks. The page's own Text Prompt box takes precedence over `serve.py`'s `--text-prompt`, which is why you paste the persona. |
 | [example3](../example3) | The live setup this example builds on |
-| [Slurm documentation](https://slurm.schedmd.com/documentation.html), [Lmod documentation](https://lmod.readthedocs.io/en/latest/) | The sources of the knowledge base |
+| [Slurm documentation](https://slurm.schedmd.com/documentation.html), [Lmod documentation](https://lmod.readthedocs.io/en/latest/), [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/) | The sources of the knowledge base |
 
 ## Running
 
@@ -197,7 +216,7 @@ The first line is `[id]` followed by keywords; the id must not be used by any ot
 
 I asked the same spoken question, "How do I ask for two GPUs and four hours in my batch script?", on the live server, streamed in real time, with three seeds each, to two personas:
 - **Base persona:** Ivan without facts (587 characters).
-- **Retrieved persona:** the persona for the topic `submitting a GPU batch job` (1,176 characters, with the sbatch, working-directory and gpus cards).
+- **Retrieved persona:** the persona for the topic `submitting a GPU batch job` (1,176 characters, with the sbatch, working-directory and gpus cards). This test ran before `bridges2.txt` was added; with it, the same topic now retrieves the Bridges-2 GPU cards instead (see the table above).
 
 | Seed | Base persona (no facts) | Retrieved persona |
 |---|---|---|
@@ -218,4 +237,4 @@ This is a small, informal test (one question, three seeds) on the 4-bit MLX mode
 - **The persona length is a tradeoff.** More cards means more facts, but a longer prompt, and possibly a less coherent engineer. 1,500 characters is a starting point, not a tested optimum. Try `--budget 1000` or `--budget 2500` and compare.
 - **Retrieval is keyword-based.** BM25 matches words, not meaning: "GPU" finds the GPU card because "gpu" is in its keywords, but a word that's in no card finds nothing. For larger knowledge bases, embedding search (e.g. a small sentence-embedding model) would catch synonyms, at the cost of an extra dependency.
 - **One topic per session.** To change topics, stop the server and start it again with a new `--topic` (option 2 above).
-- **The knowledge base reflects Slurm 26.05 and Lmod 9.4.5.** Commands rarely change, but check the documentation for the versions on your cluster.
+- **The knowledge base reflects Slurm 26.05, Lmod 9.4.5, and the Bridges-2 User Guide as of October 2026.** Commands rarely change, but Bridges-2 partitions, limits and SU rates do; PSC was also preparing to move Bridges-2 to a new datacenter. Check the current guide for anything that matters.
