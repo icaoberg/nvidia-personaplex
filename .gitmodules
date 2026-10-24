@@ -1,3 +1,6 @@
 [submodule "personaplex"]
 	path = personaplex
 	url = https://github.com/NVIDIA/personaplex.git
+[submodule "personaplex-mlx"]
+	path = personaplex-mlx
+	url = https://github.com/mu-hashmi/personaplex-mlx.git

@@ -1,47 +1,61 @@
 #!/usr/bin/env python
-"""Start PersonaPlex's live web UI (microphone in, voice out) with a SenNet or HuBMAP persona.
+"""Talk to PersonaPlex live in a web page on a MacBook Pro M4 (microphone in, voice out).
 
-This wraps upstream's `python -m moshi.server`, which serves a web page that
-streams your microphone to the model and plays its voice back, full duplex.
-The wrapper adds what this repository needs:
+NVIDIA's PyTorch code is too slow for live conversation on Apple Silicon, so
+this runs the community MLX port of PersonaPlex (the personaplex-mlx
+submodule, mu-hashmi/personaplex-mlx) with 4-bit weights quantized from
+NVIDIA's official model. Its web mode serves NVIDIA's own PersonaPlex page.
+This wrapper adds:
 
-  - checks your Hugging Face access before loading the 17 GB model
-  - picks the device (CUDA if available, else CPU) and warns when it can't
-    keep up in real time
-  - on CPU/MPS, makes CPU copies of the voice prompts (see the main README)
-  - prints the persona to paste into the page, and copies it on macOS
-  - prints the SSH tunnel command when running on a cluster node
+  - checks that this is a Mac with enough memory and that the MLX port is installed
+  - checks your Hugging Face access before loading the model
+  - prints the SenNet or HuBMAP persona to paste into the page, and copies it
 
-Run it inside the `personaplex` conda environment (see ../environment.yml):
+Run it inside the `personaplex-mlx` conda environment (see ../environment-mlx.yml):
 
-  python example3/serve.py                      # SenNet persona, auto device
+  python example3/serve.py                      # SenNet persona, 4-bit
   python example3/serve.py --persona hubmap
-  python example3/serve.py --device cuda        # NVIDIA GPU, e.g. on Bridges-2
+  python example3/serve.py --quant 8            # higher quality, slower
 """
 
 import argparse
-import os
+import importlib.util
 import platform
 import shutil
-import socket
 import subprocess
 import sys
-import tarfile
 from pathlib import Path
 
 MODEL_REPO = "nvidia/personaplex-7b-v1"  # gated: license must be accepted
 HERE = Path(__file__).resolve().parent
-# Persona file and the voice to pick, as the web UI's voice menu labels it.
-PERSONAS = {"sennet": ("sennet.txt", "NATURAL_F2"), "hubmap": ("hubmap.txt", "NATURAL_M1")}
-MAX_PROMPT_CHARS = 1000  # the web UI's text prompt limit
-
-# Per 80 ms audio frame, measured on a MacBook Pro M4 Max (48 GB) with PyTorch 2.4.1.
-# Live conversation needs to stay under 80 ms.
-MAC_SPEED = {
-    "cpu": "136 ms per 80 ms frame (1.7x slower than real time)",
-    "mps": "735 ms per 80 ms frame (9x slower than real time; aten::index_copy "
-           "falls back to the CPU)",
+MIN_MEMORY_GB = 16  # 4-bit weights are ~4 GB, plus the audio codec and macOS
+MAX_PROMPT_CHARS = 1000  # the web page's text prompt limit
+# Persona file, and the voice to pick: (MLX port's ID, web page's menu label).
+PERSONAS = {
+    "sennet": ("sennet.txt", "NATF2", "NATURAL_F2"),
+    "hubmap": ("hubmap.txt", "NATM1", "NATURAL_M1"),
 }
+
+
+def sysctl(name: str) -> str:
+    return subprocess.run(["sysctl", "-n", name], capture_output=True, text=True).stdout.strip()
+
+
+def check_mac():
+    """Require macOS on Apple Silicon and the MLX port; warn if memory is low."""
+    if sys.platform != "darwin" or platform.machine() != "arm64":
+        sys.exit("This example needs a Mac with Apple Silicon (MLX doesn't run elsewhere).")
+    if importlib.util.find_spec("personaplex_mlx") is None:
+        sys.exit("personaplex_mlx isn't installed in this Python. From the repository root:\n"
+                 "  git submodule update --init --recursive\n"
+                 "  conda env create -f environment-mlx.yml\n"
+                 "  conda activate personaplex-mlx")
+    chip = sysctl("machdep.cpu.brand_string")
+    memory_gb = int(sysctl("hw.memsize") or 0) / 2**30
+    print(f"Mac:   {chip}, {memory_gb:.0f} GB unified memory, macOS {platform.mac_ver()[0]}")
+    if memory_gb < MIN_MEMORY_GB:
+        print(f"Warning: {memory_gb:.0f} GB of memory is below the ~{MIN_MEMORY_GB} GB "
+              "this needs; expect swapping and choppy audio.", file=sys.stderr)
 
 
 def check_model_access():
@@ -61,96 +75,49 @@ def check_model_access():
         )
 
 
-def cpu_voice_prompt_dir(out_dir: Path) -> Path:
-    """Save CPU copies of all voice prompts and return their folder.
-
-    The published voice files were saved from a CUDA GPU, and moshi loads them
-    with torch.load(path) and no map_location, which fails without CUDA. The
-    web UI lets you pick any voice, so every voice is copied.
-    """
-    import torch
-    from huggingface_hub import hf_hub_download
-
-    voices_tgz = Path(hf_hub_download(MODEL_REPO, "voices.tgz"))
-    src_dir = voices_tgz.parent / "voices"
-    if not src_dir.exists():
-        with tarfile.open(voices_tgz) as tar:
-            tar.extractall(voices_tgz.parent, filter="data")
-
-    dst_dir = out_dir / "voices"
-    dst_dir.mkdir(parents=True, exist_ok=True)
-    for src in sorted(src_dir.glob("*.pt")):
-        dst = dst_dir / src.name
-        if not dst.exists():
-            torch.save(torch.load(src, map_location="cpu", weights_only=True), dst)
-    return dst_dir
-
-
-def pick_device(requested: str) -> str:
-    import torch
-
-    if requested != "auto":
-        return requested
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
-def show_persona(name: str) -> None:
-    """Print the persona to paste into the web UI; copy it on macOS."""
-    if name == "none":
-        return
-    filename, voice = PERSONAS[name]
+def load_persona(name: str) -> tuple:
+    """Return (text, voice ID, voice menu label), and print and copy the text."""
+    filename, voice, label = PERSONAS[name]
     text = (HERE / "personas" / filename).read_text().strip()
     if len(text) > MAX_PROMPT_CHARS:
-        print(f"Warning: persona is {len(text)} characters; the web UI accepts "
+        print(f"Warning: persona is {len(text)} characters; the page accepts "
               f"{MAX_PROMPT_CHARS}.", file=sys.stderr)
-    print(f"\nPersona ({name}, {len(text)} characters). Paste it into the Text Prompt box "
-          f"and pick Voice {voice}:\n\n{text}\n")
+    print(f"\nPersona ({name}, {len(text)} characters). In the page, paste it into "
+          f"Text Prompt and pick Voice {label}:\n\n{text}\n")
     if shutil.which("pbcopy"):
         subprocess.run(["pbcopy"], input=text, text=True, check=False)
         print("(Copied to the clipboard.)\n")
+    return text, voice, label
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--persona", default="sennet", choices=[*PERSONAS, "none"],
-                        help="Persona to print and copy for the web UI (default: sennet)")
-    parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu", "mps"],
-                        help="auto (default): cuda if available, else cpu")
+    parser.add_argument("--persona", default="sennet", choices=list(PERSONAS),
+                        help="Persona to print and copy for the page (default: sennet)")
+    parser.add_argument("--quant", default="4", choices=["4", "8", "none"],
+                        help="Weight quantization: 4 (default, fastest), 8, or none (bf16)")
     parser.add_argument("--port", type=int, default=8998)
-    parser.add_argument("--cpu-offload", action="store_true",
-                        help="Offload model layers to CPU on small GPUs (needs accelerate)")
-    parser.add_argument("--out-dir", default=HERE / "output", type=Path,
-                        help="Where to keep CPU voice copies (default: example3/output)")
+    parser.add_argument("--no-browser", action="store_true",
+                        help="Don't open the page in the browser automatically")
     args = parser.parse_args()
 
+    check_mac()
     check_model_access()
-    device = pick_device(args.device)
-    cmd = [sys.executable, "-m", "moshi.server", "--device", device, "--port", str(args.port)]
-    env = dict(os.environ)
-    if device != "cuda":
-        cmd += ["--voice-prompt-dir", str(cpu_voice_prompt_dir(args.out_dir))]
-    if device == "mps":
-        env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # must be set before torch starts
-    if args.cpu_offload:
-        cmd.append("--cpu-offload")
+    text, voice, _ = load_persona(args.persona)
 
-    show_persona(args.persona)
-    if device != "cuda":
-        speed = MAC_SPEED.get(device, "")
-        print(f"Warning: running on {device}. On a MacBook Pro M4 Max this measured {speed}. "
-              "The page works, but the model falls behind and its replies lag and stutter. "
-              "For real-time conversation, use an NVIDIA GPU (see example3/README.md).\n",
-              file=sys.stderr)
+    cmd = [sys.executable, "-m", "personaplex_mlx.local_web",
+           "--voice", voice, "--text-prompt", text, "--port", str(args.port)]
+    if args.quant != "none":
+        cmd += ["-q", args.quant]
+    if args.no_browser:
+        cmd.append("--no-browser")
 
-    print(f"When the server says it's ready, open http://localhost:{args.port}")
-    if platform.system() == "Linux":
-        print(f"On a cluster node, tunnel from your laptop first:\n"
-              f"  ssh -L {args.port}:{socket.gethostname()}:{args.port} "
-              f"<user>@<login-host>\n")
+    weights = f"{args.quant}-bit" if args.quant != "none" else "bf16"
+    print(f"Loading PersonaPlex ({weights} weights). "
+          f"When the log says 'listening', open http://localhost:{args.port}")
     print("Use headphones, so the model doesn't hear itself. Press Ctrl+C to stop.\n")
-
     try:
-        subprocess.run(cmd, env=env, check=False)
+        subprocess.run(cmd, check=False)
     except KeyboardInterrupt:
         pass
 

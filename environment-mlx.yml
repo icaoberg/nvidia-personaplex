@@ -1,0 +1,25 @@
+# Conda environment for the community MLX port of PersonaPlex (Apple Silicon only).
+#
+# Used by example3 for live conversation on a Mac. It's separate from
+# environment.yml because the MLX port needs sphn >= 0.2 and numpy >= 2.1,
+# while NVIDIA's package pins sphn < 0.2.
+#
+# Create and activate (run from the root of this repository, with the
+# submodules checked out):
+#
+#   git submodule update --init --recursive
+#   conda env create -f environment-mlx.yml
+#   conda activate personaplex-mlx
+#
+# Package pins come from personaplex-mlx/pyproject.toml (MLX 0.26, Python 3.12).
+name: personaplex-mlx
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      # mu-hashmi/personaplex-mlx (editable, from the submodule). Pulls in
+      # mlx, rustymimi, sphn, numpy, huggingface-hub, sentencepiece,
+      # sounddevice, aiohttp, and torch (only to read the .pt voice prompts).
+      - -e ./personaplex-mlx

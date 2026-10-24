@@ -56,5 +56,8 @@ example1/**/transcript.txt
 example1/**/turn[0-9][0-9].wav
 example1/**/tmp*/
 
+# MLX (personaplex-mlx, example3)
+mlx-trace.json
+
 # Node (web client)
 node_modules/
