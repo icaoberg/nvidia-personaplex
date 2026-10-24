@@ -37,7 +37,7 @@ Ask for nodes with dash N, for tasks, which are usually MPI processes, with dash
 [memory] memory, mem, ram, mem per cpu, out of memory
 Request memory with dash dash mem, which is per node and in megabytes unless you add G for gigabytes, or with mem per cpu; use one or the other, not both. A job that uses more memory than it asked for can end with the state OUT_OF_MEMORY.
 
-[gpus] gpu, gpus, gres, cuda, accelerator, gpu job
+[gpus] gpu, gpus, gres, cuda, accelerator, gpu job, gpu batch job, request gpus
 Request GPUs with dash dash gres equals gpu colon two for two GPUs per node, or with dash dash gpus. You can name a GPU type, like gpu colon type colon count, but type names differ by cluster, so check your site's documentation.
 
 [partition-account] partition, queue, account, allocation, charge

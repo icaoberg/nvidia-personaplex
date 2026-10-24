@@ -219,7 +219,7 @@ Measured on an M4 Max: 72 ms per 80 ms audio frame at 4-bit (0.90× real time). 
 
 [`examples/example4/`](examples/example4) asks whether retrieval-augmented generation can make the guide more of an expert, for high-performance computing. Penelope, a student, talks with Ivan, an HPC engineer played by PersonaPlex.
 
-PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 95 fact cards summarized from the [Slurm](https://slurm.schedmd.com/documentation.html) and [Lmod](https://lmod.readthedocs.io/en/latest/) documentation and PSC's [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), and they're added to the engineer's persona, which then runs live on your Mac as in example3.
+PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 116 fact cards summarized from the [Slurm](https://slurm.schedmd.com/documentation.html) and [Lmod](https://lmod.readthedocs.io/en/latest/) documentation, PSC's [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), the cluster's own `sinfo` output, and NVIDIA's GPU specifications, and they're added to the engineer's persona, which then runs live on your Mac as in example3.
 
 ```bash
 python examples/example4/serve.py --topic "submitting a GPU batch job"
@@ -284,15 +284,44 @@ NVIDIA publishes no number. A 7B model in BF16 needs about **14–15 GB for the 
 
 ### PSC Bridges-2 GPUs
 
-Bridges-2's GPU nodes, from the [PSC user guide](https://www.psc.edu/resources/bridges-2/user-guide/) and [ACCESS CiDeR](https://cider.access-ci.org/public/resources/RDR_000646). The "PersonaPlex fit" column is my assessment, not PSC's.
+Bridges-2's GPU nodes, from the [PSC user guide](https://www.psc.edu/resources/bridges-2/user-guide/), [ACCESS CiDeR](https://cider.access-ci.org/public/resources/RDR_000646), and `sinfo` run on a Bridges-2 login node on 2026-10-24 (node counts, node names, CPU cores, memory). The "PersonaPlex fit" column is my assessment, not PSC's.
 
-| GPU type (`--gres`) | Nodes | GPUs / node | GPU memory | RAM / node | Native BF16 | SUs / GPU-hour | PersonaPlex fit |
-|---|---|---|---|---|---|---|---|
-| `h100-80` (H100 SXM5) | 10 | 8 | 80 GB | 2 TB | Yes (Hopper) | 2 | **Best.** Officially supported architecture; one GPU is plenty. |
-| `l40s-48` (L40S) | 3 | 8 | 48 GB | 1 TB | Yes (Ada) | 1 | **Good.** Fits on one GPU; Ada isn't officially listed but should work. |
-| `v100-32` (V100 SXM2) | 24 | 8 | 32 GB | 512 GB | No (Volta) | 1 | **Risky.** Fits in memory, but BF16 is emulated; likely too slow for live use. |
-| `v100-32` (DGX-2) | 1 | 16 | 32 GB | 1.5 TB | No (Volta) | 1 | Same as above. |
-| `v100-16` (V100) | 9 | 8 | 16 GB | 192 GB | No (Volta) | 1 | **Poor.** Too tight for the weights plus cache; offline with `--cpu-offload` at best. |
+| GPU type (`--gres`) | Nodes (names) | GPUs / node | GPU memory | CPU cores / node | RAM / node | Native BF16 | SUs / GPU-hour | PersonaPlex fit |
+|---|---|---|---|---|---|---|---|---|
+| `h100-80` (H100 SXM5) | 10 (`w001`–`w010`) | 8 | 80 GB | 104 | ~2 TB | Yes (Hopper) | 2 | **Best.** Officially supported architecture; one GPU is plenty. |
+| `l40s-48` (L40S) | 3 (`gl001`–`gl003`) | 8 | 48 GB | 192 | ~1 TB | Yes (Ada) | 1 | **Good.** Fits on one GPU; Ada isn't officially listed but should work. |
+| `v100-32` (V100 SXM2) | 24 (`v001`–`v024`) | 8 | 32 GB | 40 | ~515 GB | No (Volta) | 1 | **Risky.** Fits in memory, but BF16 is emulated; likely too slow for live use. |
+| `v100-32` (DGX-2) | 1 (`v034`) | 16 | 32 GB | 96 | ~1.4 TB | No (Volta) | 1 | Same as above. |
+| `v100-16` (V100) | 9 (`v025`–`v033`) | 8 | 16 GB | 40 | 192 GB | No (Volta) | 1 | **Poor.** Too tight for the weights plus cache; offline with `--cpu-offload` at best. |
+
+Notes from the `sinfo` snapshot:
+- **v100-32 nodes:** 23 of the 24 (`v002`–`v024`) are in the GPU and GPU-shared partitions. The 24th, `v001`, is in a separate GPU-small partition, which matches the ACCESS count of 24.
+- **DGX-2 memory:** about 1.4 TB, where ACCESS says 1.5 TB.
+- **Other GPU partitions:** querying every partition also shows GPU nodes the user guide doesn't describe, probably reserved for specific projects:
+  - GPU-dev: one NVIDIA A100
+  - ROBO and ROBO-8: six more H100 nodes, with 96 CPUs each
+  - HACC: four nodes, each with four AMD Instinct MI210s (64 GB HBM2e, 1.6 TB/s), which use ROCm, not CUDA
+
+Node counts change as PSC adds or retires nodes. To see the current GPU nodes:
+
+```bash
+sinfo -p GPU -N -o "%15N %6c %10m %40G %f"
+```
+
+GPU hardware, from NVIDIA's specifications. Peak Tensor Core numbers are without sparsity, and real workloads reach less.
+
+| | H100 SXM5 | L40S | V100 SXM2 |
+|---|---|---|---|
+| Architecture | Hopper | Ada Lovelace | Volta |
+| CUDA cores / Tensor Cores | 16,896 / 528 (4th gen) | 18,176 / 568 (4th gen) | 5,120 / 640 (1st gen) |
+| Memory | 80 GB HBM3, 3.35 TB/s | 48 GB GDDR6, 864 GB/s | 16 or 32 GB HBM2, 900 GB/s |
+| FP64 / FP32 | 34 / 67 TFLOPS | not listed / 91.6 TFLOPS | 7.8 / 15.7 TFLOPS |
+| BF16 Tensor Core | ~990 TFLOPS | 362 TFLOPS | not supported (FP16: 125 TFLOPS) |
+| FP8 | Yes | Yes | No |
+| GPU interconnect | NVLink, 900 GB/s | PCIe Gen4 only (no NVLink) | NVLink, 300 GB/s (on the v100-32 nodes) |
+| Max power | 700 W | 350 W | 300 W |
+
+On the DGX-2 (`v034`), the sixteen V100s are connected by twelve NVSwitches, giving 2.4 TB/s of bisection bandwidth. Sources: NVIDIA's [H100](https://www.nvidia.com/en-us/data-center/h100/) and [L40S](https://www.nvidia.com/en-us/data-center/l40s/) product pages, the [Hopper architecture post](https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/) (core counts), the V100 datasheet (January 2020), and the DGX-2 datasheet (April 2018).
 
 All node types are available in the `GPU` (whole nodes) and `GPU-shared` (up to 4 GPUs of one node) partitions, each with a 48-hour limit. One GPU is enough for PersonaPlex, so use `GPU-shared`. For example, for an interactive session on one L40S:
 

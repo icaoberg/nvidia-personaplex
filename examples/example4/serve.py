@@ -46,7 +46,8 @@ STOPWORDS = {"a", "an", "and", "the", "to", "of", "for", "with", "in", "on", "i"
              "want", "make", "how", "do", "is", "it", "some", "help", "use", "using", "get",
              "but", "have", "no", "not", "need", "or", "so", "what", "can", "should", "me",
              "about", "learn", "understand", "explain", "why", "does", "are",
-             "run", "running", "across"}
+             "run", "running", "across", "there"}
+NOT_PLURAL = {"l40s"}  # GPU model names that end in "s" but aren't plurals ("h100s" is)
 
 # The persona without facts. {topic} is filled in; retrieved facts follow it.
 BASE_PERSONA = (
@@ -122,6 +123,8 @@ def singular(word: str) -> str:
     "submitting" -> "submit". Words like "saving" -> "sav" don't come out
     right, so cards also list such forms in their keywords.
     """
+    if word in NOT_PLURAL:
+        return word
     if len(word) > 4 and word.endswith("ies"):
         return word[:-3] + "y"
     if len(word) > 5 and word.endswith("ing"):
@@ -137,13 +140,17 @@ def singular(word: str) -> str:
 def tokenize(text: str) -> list:
     """Lowercase words for matching, without stopwords, in singular form.
 
+    Letters and digits stay together, so GPU names like "h100" and "l40s"
+    match; bare numbers are dropped.
+
     Args:
         text: Any text.
 
     Returns:
-        The words, e.g. "Job Arrays and Dependencies" -> ["job", "array", "dependency"].
+        The words, e.g. "Job Arrays on the H100s" -> ["job", "array", "h100"].
     """
-    return [singular(w) for w in re.findall(r"[a-z]+", text.lower()) if w not in STOPWORDS]
+    return [singular(w) for w in re.findall(r"[a-z0-9]+", text.lower())
+            if w not in STOPWORDS and not w.isdigit()]
 
 
 def load_cards(path: Path) -> list:

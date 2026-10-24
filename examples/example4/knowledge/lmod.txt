@@ -20,7 +20,7 @@ Lmod is the module system many clusters use to give you software. Loading a modu
 [module-avail] module avail, available, software, list software, what is installed
 module avail lists the modules you can load right now. Add part of a name to narrow it down, for example module avail python.
 
-[module-list] module list, loaded, which modules, current modules
+[module-list] module list, loaded, loaded modules, current modules
 module list shows the modules you have loaded at the moment.
 
 [module-load] module load, load, loading, use software, version

@@ -15,6 +15,39 @@
 # the text and as RM-small in its options table), the cards follow the text.
 # These cards are site-specific: they apply to Bridges-2, while slurm.txt and
 # lmod.txt cover Slurm and Lmod in general.
+#
+# The GPU node cards (b2-gpu-h100 through b2-gpu-node-names) also use the
+# output of these read-only commands, run on a Bridges-2 login node on
+# 2026-10-24:
+#   sinfo -p GPU,GPU-shared -o "%10D %6c %10m %40G %f"
+#   sinfo -p GPU -N -o "%15N %6c %10m %40G %f"
+# They showed 23 v100-32 nodes in GPU and GPU-shared (v002 to v024). A query
+# of all partitions the same day found the 24th, v001, in a partition called
+# GPU-small, which matches the ACCESS resource listing's count of 24. That
+# query also found GPU nodes in partitions the user guide doesn't describe
+# (ROBO, ROBO-8, GPU-dev, HACC; see b2-other-gpu-partitions), which are
+# probably limited to specific projects. Node counts change as PSC adds or
+# retires nodes; rerun the commands for current numbers. Memory is Slurm's figure, in
+# megabytes, rounded in the cards. Slurm's CPU count includes hyperthreads on
+# some nodes (the DGX-2's 2 x 24-core CPUs show as 96), so the cards say
+# "CPUs as Slurm counts them" unless the core count is known.
+#
+# The GPU hardware cards (b2-gpu-hw-*) use the manufacturer's specifications:
+#   - NVIDIA H100 product page (https://www.nvidia.com/en-us/data-center/h100/)
+#     and the "NVIDIA Hopper Architecture In-Depth" blog post for core counts;
+#     Bridges-2's H100s are the SXM5 80 GB version, per PSC's H100 announcement.
+#   - NVIDIA L40S product page (https://www.nvidia.com/en-us/data-center/l40s/).
+#   - NVIDIA V100 datasheet, January 2020 (SXM2 figures).
+#   - NVIDIA DGX-2 datasheet, April 2018.
+#   - NVIDIA A100 product page (https://www.nvidia.com/en-us/data-center/a100/),
+#     which lists only the 80 GB versions.
+#   - AMD Instinct MI210 figures from Lenovo's product guide
+#     (https://lenovopress.lenovo.com/lp1862-amd-instinct-mi210-accelerator);
+#     AMD's own page didn't load when these cards were written.
+# Node CPU models and the V100 nodes' NVLink status come from the ACCESS
+# resource listing (https://cider.access-ci.org/public/resources/RDR_000646).
+# Tensor Core figures are NVIDIA's peak numbers, quoted without sparsity
+# unless the card says otherwise; real workloads reach less.
 
 [b2-overview] bridges2, bridges, psc, pittsburgh, system, nodes, hardware, what is bridges
 Bridges-2 is the supercomputer at the Pittsburgh Supercomputing Center, PSC. It has regular memory nodes with 128 cores and 256 gigabytes, a few with 512 gigabytes, extreme memory nodes with 96 cores and 4 terabytes, and GPU nodes with eight GPUs each.
@@ -34,7 +67,7 @@ Your Bridges-2 home directory is slash jet slash home slash your username. It ho
 [b2-project] bridges2, project, ocean, storage, store, where to store, large files, space, quota, inode, project space
 For larger files, use your project space on the Ocean file system, slash ocean slash projects slash your group slash your username, also called dollar PROJECT. It isn't backed up, and if your group goes over its storage quota, you can't submit jobs.
 
-[b2-local-ramdisk] bridges2, local, ramdisk, scratch, temporary, fast disk
+[b2-local-ramdisk] bridges2, local, ramdisk, scratch, temporary, node disk
 Inside a Bridges-2 job, dollar LOCAL is scratch space on the node's own disk and dollar RAMDISK is scratch space in memory. Both are deleted when the job ends, so copy results back to your project space first.
 
 [b2-retention] bridges2, allocation expires, retention, files deleted, expire
@@ -101,7 +134,70 @@ RM-512 jobs on Bridges-2 start at one full node of 128 cores and can use up to t
 An EM job on Bridges-2 asks for cores in multiples of 24 with dash n, for example dash p EM dash n 96 for a whole node, which costs 480 SUs for five hours. EM jobs must be batch jobs: not interactive, and not from OnDemand.
 
 [b2-gpu-nodes] bridges2, gpu nodes, h100, l40s, v100, dgx, dgx-2, how many gpus, gpu memory
-Bridges-2 GPU nodes have eight GPUs each: 10 nodes with H100s with 80 gigabytes, 3 nodes with L40S with 48 gigabytes, and V100 nodes with 32 or 16 gigabytes. There is also one DGX-2 with sixteen V100 32-gigabyte GPUs, requested with dash dash gpus equals v100 dash 32 colon sixteen.
+Bridges-2 GPU nodes have eight GPUs each: 10 nodes with H100s with 80 gigabytes, 3 nodes with L40S with 48 gigabytes, 23 nodes with V100s with 32 gigabytes in the main GPU partitions, and 9 nodes with V100s with 16 gigabytes. There is also one DGX-2 with sixteen V100 32-gigabyte GPUs, requested with dash dash gpus equals v100 dash 32 colon sixteen.
+
+[b2-gpu-h100] bridges2, h100, h100-80, newest gpu, largest gpu, 80gb, gpu node
+Bridges-2 has 10 H100 nodes, named w001 to w010. Each has eight H100 GPUs with 80 gigabytes, 104 CPUs as Slurm counts them, and about 2 terabytes of memory. Request them as h100 dash 80; they cost two SUs per GPU-hour, twice the other GPUs.
+
+[b2-gpu-l40s] bridges2, l40s, l40s-48, 48gb, gpu node
+Bridges-2 has 3 L40S nodes, named gl001 to gl003. Each has eight L40S GPUs with 48 gigabytes, 192 CPUs as Slurm counts them, and about 1 terabyte of memory. Request them as l40s dash 48, at one SU per GPU-hour.
+
+[b2-gpu-v100-32] bridges2, v100, v100-32, 32gb, gpu node, most gpus
+Bridges-2 has 24 V100 32-gigabyte nodes, the most of any GPU type: v002 to v024 in the GPU and GPU-shared partitions, and v001 in a separate partition called GPU-small. Each has eight V100 GPUs linked by NVLink, two 20-core Intel Xeon Gold 6248 CPUs, and about 500 gigabytes of memory. Request them as v100 dash 32, at one SU per GPU-hour.
+
+[b2-gpu-v100-16] bridges2, v100, v100-16, 16gb, small gpu, gpu node
+Bridges-2 has 9 V100 16-gigabyte nodes, named v025 to v033. Each has eight V100 GPUs without NVLink, 40 CPUs, and 192 gigabytes of memory. Request them as v100 dash 16, at one SU per GPU-hour.
+
+[b2-gpu-dgx2] bridges2, dgx-2, dgx2, 16 gpus, sixteen gpus, nvidia dgx, v034
+Bridges-2's DGX-2, node v034, has sixteen V100 32-gigabyte GPUs, two 24-core Intel Xeon Platinum 8168 CPUs, which Slurm counts as 96 CPUs because of hyperthreading, and about 1.4 terabytes of memory. Ask for all sixteen GPUs at once with dash dash gpus equals v100 dash 32 colon sixteen.
+
+[b2-gpu-chooser] bridges2, which gpu, choose gpu, pick gpu, gpu memory, model size, cheapest gpu
+To pick a Bridges-2 GPU, start from how much GPU memory your work needs: 16 gigabytes on V100-16, 32 on V100-32, 48 on L40S, or 80 on H100. H100s cost twice as much per hour, so use them when you need the memory, and remember that the L40S has only 3 nodes while the V100-32 has 23.
+
+[b2-gpu-cpus] bridges2, cpus per gpu, cores per gpu, cpu cores, dataloader, gpu-shared cpus
+On Bridges-2 GPU nodes, the CPUs per GPU, as Slurm counts them, differ by type: about 13 per GPU on H100 nodes, 24 on L40S nodes, 5 on V100 nodes, and 6 on the DGX-2. That matters if your GPU job also needs CPU cores, for example to load data.
+
+[b2-gpu-features] bridges2, gpu, feature, constraint, sinfo, node feature, l40s
+Bridges-2 GPU nodes carry Slurm features you can see with sinfo: h100 and h100 dash 80, l40s, v100 with v100 dash 32 or v100 dash 16, and dgx dash 2 on the DGX-2. Note that the L40S feature is just l40s, even though you request the GPU as l40s dash 48.
+
+[b2-gpu-node-names] bridges2, node names, nodelist, which node, squeue, w001, gl001, v002
+On Bridges-2 you can tell a GPU node's type from its name, for example in squeue's node list: w nodes are H100s, gl nodes are L40S, v001 to v024 are V100 32-gigabyte nodes, v025 to v033 are V100 16-gigabyte nodes, and v034 is the DGX-2.
+
+[b2-gpu-sinfo] bridges2, sinfo, gpu, check gpus, gpu nodes, current, available gpus
+To see Bridges-2's GPU nodes yourself, run sinfo with dash p GPU and an output format that shows the GRES column, which lists each node's GPU type and count; adding dash N lists every node separately.
+
+[b2-gpu-hw-h100] bridges2, h100, hopper, h100 specs, hbm3, tensor cores, fp8, mig, hardware
+Bridges-2's H100s are NVIDIA H100 SXM5 GPUs, from the Hopper generation. Each has 16,896 CUDA cores, 528 fourth-generation Tensor Cores, and 80 gigabytes of HBM3 memory at 3.35 terabytes per second, linked by NVLink at 900 gigabytes per second, and supports BF16 and FP8.
+
+[b2-gpu-hw-h100-speed] bridges2, h100, flops, teraflops, fp64, double precision, performance, fast, speed, h100 speed
+NVIDIA rates the H100 SXM at 34 teraflops in FP64, 67 with FP64 Tensor Cores, 67 in FP32, and about 990 teraflops in BF16 or FP16 on Tensor Cores, 1,979 with sparsity. It can also be split into up to seven smaller GPUs with MIG.
+
+[b2-gpu-hw-l40s] bridges2, l40s, ada, ada lovelace, l40s specs, gddr6, hardware, rt cores
+Bridges-2's L40S GPUs are from NVIDIA's Ada Lovelace generation. Each has 18,176 CUDA cores, 568 fourth-generation Tensor Cores, and 48 gigabytes of GDDR6 memory at 864 gigabytes per second; it plugs in over PCIe Gen4, with no NVLink and no MIG.
+
+[b2-gpu-hw-l40s-speed] bridges2, l40s, flops, teraflops, performance, fp8, l40s speed, fp32
+NVIDIA rates the L40S at 91.6 teraflops in FP32, 362 teraflops in BF16 or FP16 on Tensor Cores, and 733 in FP8, about double each with sparsity. Its datasheet doesn't list FP64, so for double-precision work use the H100s or V100s.
+
+[b2-gpu-hw-v100] bridges2, v100, volta, v100 specs, hbm2, hardware, tensor cores, nvlink
+Bridges-2's V100s are from NVIDIA's Volta generation. Each has 5,120 CUDA cores, 640 first-generation Tensor Cores, and HBM2 memory at 900 gigabytes per second; the SXM2 version is rated at 7.8 teraflops in FP64, 15.7 in FP32, and 125 on Tensor Cores, with NVLink at 300 gigabytes per second.
+
+[b2-gpu-hw-v100-precision] bridges2, v100, bf16, bfloat16, fp16, mixed precision, precision, volta
+V100 Tensor Cores work in FP16, not BF16 or FP8. Models trained in BF16 run much slower on a V100 or need converting to FP16, so for BF16 work use the H100s or L40S.
+
+[b2-gpu-hw-dgx2] bridges2, dgx-2, nvswitch, dgx-2 specs, hardware, all-to-all
+The DGX-2's sixteen V100 32-gigabyte GPUs are connected by twelve NVSwitches, so every GPU can talk to every other at full NVLink speed, with 2.4 terabytes per second of bisection bandwidth and 512 gigabytes of GPU memory in total.
+
+[b2-gpu-hw-compare] bridges2, compare gpus, gpu comparison, memory bandwidth, fastest gpu, which is faster
+Comparing Bridges-2 GPUs by memory bandwidth, which often limits AI work: the H100 moves 3.35 terabytes per second, the V100 900 gigabytes, and the L40S 864 gigabytes. The H100 is also far ahead in FP64, which matters for many simulations.
+
+[b2-other-gpu-partitions] bridges2, other partitions, gpu-small, gpu-dev, robo, robo-8, hacc, a100, mi210, amd, restricted
+sinfo on Bridges-2 also shows GPU partitions the user guide doesn't describe: GPU-small with one V100 node, GPU-dev with one A100 GPU, ROBO and ROBO-8 with six more H100 nodes, and HACC with four nodes of four AMD MI210 GPUs. They're probably reserved for specific projects, so ask PSC before trying to use them.
+
+[b2-gpu-hw-a100] bridges2, a100, ampere, gpu-dev, a100 specs, hardware
+The A100 in Bridges-2's GPU-dev partition is from NVIDIA's Ampere generation; Slurm doesn't say whether it's the 40 or 80 gigabyte model, and nvidia dash smi on the node would tell you. NVIDIA rates the 80 gigabyte A100 at 9.7 teraflops in FP64, 19.5 in FP32, and 312 in BF16 on Tensor Cores, with about 2 terabytes per second of memory bandwidth.
+
+[b2-gpu-hw-mi210] bridges2, mi210, amd, instinct, rocm, hip, hacc, amd gpu, hardware
+The AMD Instinct MI210 GPUs in Bridges-2's HACC partition each have 104 compute units, 64 gigabytes of HBM2e memory at 1.6 terabytes per second, and about 22.6 teraflops in FP64, or 45 with matrix cores. They're AMD GPUs, so programs use ROCm and HIP instead of CUDA.
 
 [b2-gpu-partition-example] bridges2, gpu, gpu partition, example, sbatch, multiple nodes, cost
 In the GPU partition on Bridges-2, ask for GPUs in multiples of eight, for example sbatch dash p GPU dash N two dash dash gpus equals v100 dash 16 colon sixteen for two full nodes. A full V100 node for five hours costs 40 SUs, and H100 GPUs cost twice as much.
@@ -127,7 +223,7 @@ On Bridges-2, software comes as modules: for example module load cuda for CUDA, 
 [b2-datasets] bridges2, datasets, imagenet, coco, mnist, alphafold, community data, ocean datasets
 Bridges-2 has public datasets anyone with an account can use, in slash ocean slash datasets slash community, including ImageNet, COCO, CIFAR-10, MNIST, and AlphaFold, so you don't need to download your own copy.
 
-[b2-help] bridges2, help, support, ticket, email, contact, psc help
+[b2-help] bridges2, help, helpdesk, ticket, email, contact, psc help
 For Bridges-2 help, email help at psc dot edu, or call PSC at 412 268 4960.
 
 [b2-acknowledge] bridges2, acknowledge, cite, citation, paper, publication, access
