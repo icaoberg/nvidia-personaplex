@@ -30,6 +30,8 @@ logged in to Hugging Face with the model license accepted:
 """
 
 import argparse
+import contextlib
+import io
 import json
 import platform
 import subprocess
@@ -310,6 +312,7 @@ class PersonaPlex:
 
         Each call starts fresh: it resets the model's streaming state and
         replays the voice and role prompts, so turns don't share memory.
+        Upstream's progress messages while replaying them are hidden.
 
         Args:
             voice_prompt: CPU copy of the voice (.pt), from cpu_voice_prompt().
@@ -335,7 +338,8 @@ class PersonaPlex:
         self.mimi.reset_streaming()
         self.other_mimi.reset_streaming()
         self.lm_gen.reset_streaming()
-        self.lm_gen.step_system_prompts(self.mimi)
+        with contextlib.redirect_stdout(io.StringIO()):  # hide "Done loading ..." lines
+            self.lm_gen.step_system_prompts(self.mimi)
         self.mimi.reset_streaming()
 
         audio = np.concatenate([heard, silence(listen_seconds)])[None, :]
@@ -433,6 +437,7 @@ def main() -> None:
             print("  Student: (no audio; skipping this question)")
             continue
         print(f"  Student: {asked_text}")
+        print()  # blank line between the student and the guide
 
         answer = None
         for attempt in range(ATTEMPTS):

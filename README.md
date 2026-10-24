@@ -200,7 +200,7 @@ See [example2/README.md](example2/README.md) for how it works, the prompts forma
 
 ### Example: live conversation in a web page (MacBook Pro M4)
 
-In [`example3/`](example3), you open a page, allow the microphone, and talk to PersonaPlex in real time, **entirely on your Mac**. It plays a SenNet or HuBMAP data guide.
+In [`example3/`](example3), you open a page, allow the microphone, and talk to PersonaPlex in real time, **entirely on your Mac**. You're the student, and it plays Chef Marco, a cooking teacher. SenNet and HuBMAP data-guide personas are also included (`--persona sennet` or `--persona hubmap`).
 
 NVIDIA's PyTorch code is too slow for this on Apple Silicon, so example3 runs the community MLX port ([`personaplex-mlx/`](personaplex-mlx)). The port quantizes NVIDIA's weights to 4-bit and serves NVIDIA's own web page. It needs its own conda environment, [`environment-mlx.yml`](environment-mlx.yml).
 

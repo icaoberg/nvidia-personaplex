@@ -9,12 +9,13 @@ This wrapper adds:
 
   - checks that this is a Mac with enough memory and that the MLX port is installed
   - checks your Hugging Face access before loading the model
-  - prints the SenNet or HuBMAP persona to paste into the page, and copies it
+  - prints the persona to paste into the page, and copies it: a chef and
+    cooking teacher by default, or a SenNet or HuBMAP data guide
 
 Run it inside the `personaplex-mlx` conda environment (see ../environment-mlx.yml):
 
-  python example3/serve.py                      # SenNet persona, 4-bit
-  python example3/serve.py --persona hubmap
+  python example3/serve.py                      # chef persona, 4-bit
+  python example3/serve.py --persona sennet     # or hubmap
   python example3/serve.py --quant 8            # higher quality, slower
 """
 
@@ -32,6 +33,7 @@ MIN_MEMORY_GB = 16  # 4-bit weights are ~4 GB, plus the audio codec and macOS
 MAX_PROMPT_CHARS = 1000  # the web page's text prompt limit
 # Persona file, and the voice to pick: (MLX port's ID, web page's menu label).
 PERSONAS = {
+    "chef": ("chef.txt", "NATM0", "NATURAL_M0"),
     "sennet": ("sennet.txt", "NATF2", "NATURAL_F2"),
     "hubmap": ("hubmap.txt", "NATM1", "NATURAL_M1"),
 }
@@ -101,12 +103,12 @@ def load_persona(name: str) -> tuple:
     longer than the page's MAX_PROMPT_CHARS limit.
 
     Args:
-        name: A key of PERSONAS, e.g. "sennet".
+        name: A key of PERSONAS, e.g. "chef".
 
     Returns:
         (text, voice, label): the persona text from personas/, the voice ID
-        for the MLX server (e.g. "NATF2"), and the matching label in the
-        page's voice menu (e.g. "NATURAL_F2").
+        for the MLX server (e.g. "NATM0"), and the matching label in the
+        page's voice menu (e.g. "NATURAL_M0").
     """
     filename, voice, label = PERSONAS[name]
     text = (HERE / "personas" / filename).read_text().strip()
@@ -129,8 +131,8 @@ def main() -> None:
     precedence), until Ctrl+C.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--persona", default="sennet", choices=list(PERSONAS),
-                        help="Persona to print and copy for the page (default: sennet)")
+    parser.add_argument("--persona", default="chef", choices=list(PERSONAS),
+                        help="Persona to print and copy for the page (default: chef)")
     parser.add_argument("--quant", default="4", choices=["4", "8", "none"],
                         help="Weight quantization: 4 (default, fastest), 8, or none (bf16)")
     parser.add_argument("--port", type=int, default=8998)
