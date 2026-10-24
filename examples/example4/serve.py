@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-"""Talk live to an HPC engineer whose persona is built from retrieved Slurm facts.
+"""Talk live to an HPC engineer whose persona is built from retrieved Slurm and Lmod facts.
 
 PersonaPlex only takes knowledge through its text prompt, played into the
 model once before the conversation starts (see README.md). So instead of
 retrieving during the conversation, this retrieves *before* it
 (retrieve-then-prompt):
 
-  1. The student says what they need help with
+  1. Penelope, the student, says what they need help with
      (--topic "submitting a GPU batch job").
-  2. The topic is matched against the fact cards in knowledge/slurm.txt,
-     summarized from the Slurm documentation, with BM25, a classic
-     keyword-ranking formula.
-  3. The best cards are added to a short persona for Riley, a
+  2. The topic is matched against the fact cards in every knowledge/*.txt
+     file (slurm.txt and lmod.txt, summarized from the Slurm and Lmod
+     documentation) with BM25, a classic keyword-ranking formula.
+  3. The best cards are added to a short persona for Ivan, a
      high-performance computing engineer, up to a character budget, and the
      persona is printed and copied.
   4. The community MLX port's web server starts, as in example3, so the
@@ -20,7 +20,7 @@ retrieving during the conversation, this retrieves *before* it
 Run it inside the `personaplex-mlx` conda environment (see ../../environment-mlx.yml):
 
   python examples/example4/serve.py --topic "submitting a GPU batch job"
-  python examples/example4/serve.py --topic "job arrays and dependencies" --budget 1800
+  python examples/example4/serve.py --topic "loading a compiler module" --budget 1800
   python examples/example4/serve.py --topic "why is my job pending" --dry-run   # prompt only
 """
 
@@ -41,7 +41,7 @@ VOICE, VOICE_LABEL = "NATF2", "NATURAL_F2"  # MLX port's ID, web page's menu lab
 MIN_MEMORY_GB = 16  # 4-bit weights are ~4 GB, plus the audio codec and macOS
 BM25_K1, BM25_B = 1.5, 0.75  # standard BM25 parameters
 KEYWORD_WEIGHT = 2  # a card's keyword line counts this many times in its score
-MIN_RELATIVE_SCORE = 0.25  # skip cards scoring below this fraction of the best card
+MIN_RELATIVE_SCORE = 0.4  # skip cards scoring below this fraction of the best card
 STOPWORDS = {"a", "an", "and", "the", "to", "of", "for", "with", "in", "on", "i", "my",
              "want", "make", "how", "do", "is", "it", "some", "help", "use", "using", "get",
              "but", "have", "no", "not", "need", "or", "so", "what", "can", "should", "me",
@@ -50,13 +50,14 @@ STOPWORDS = {"a", "an", "and", "the", "to", "of", "for", "with", "in", "on", "i"
 
 # The persona without facts. {topic} is filled in; retrieved facts follow it.
 BASE_PERSONA = (
-    "You enjoy teaching. Your name is Riley and you are a high performance computing "
-    "engineer who supports researchers on a Linux cluster that runs the Slurm workload "
-    "manager. You are talking with a student who wants help with {topic}. Ask what they "
-    "are trying to run and what they have tried, then explain one step at a time in plain "
-    "language, give the exact command when it helps, and check in before moving on. Keep "
-    "answers short and encouraging. If you aren't sure, say so and suggest the Slurm "
-    "documentation or the cluster's support team. Use these facts:"
+    "You enjoy teaching. Your name is Ivan and you are a high performance computing "
+    "engineer who supports researchers on a Linux cluster that uses the Slurm workload "
+    "manager and the Lmod module system. You are talking with Penelope, a student who "
+    "wants help with {topic}. Ask what they are trying to run and what they have tried, then "
+    "explain one step at a time in plain language, give the exact command when it helps, "
+    "and check in before moving on. Keep answers short and encouraging. If you aren't "
+    "sure, say so and suggest the documentation or the cluster's support team. "
+    "Use these facts:"
 )
 
 
@@ -115,9 +116,19 @@ def check_model_access() -> None:
 
 
 def singular(word: str) -> str:
-    """Strip a simple English plural: "dependencies" -> "dependency", "arrays" -> "array"."""
+    """Strip a simple English plural or "-ing" ending.
+
+    "dependencies" -> "dependency", "arrays" -> "array", "loading" -> "load",
+    "submitting" -> "submit". Words like "saving" -> "sav" don't come out
+    right, so cards also list such forms in their keywords.
+    """
     if len(word) > 4 and word.endswith("ies"):
         return word[:-3] + "y"
+    if len(word) > 5 and word.endswith("ing"):
+        stem = word[:-3]
+        if stem[-1] == stem[-2] and stem[-1] not in "lsz":  # "submitt" -> "submit"
+            stem = stem[:-1]
+        return stem
     if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
         return word[:-1]
     return word
@@ -139,7 +150,7 @@ def load_cards(path: Path) -> list:
     """Read the fact cards from a knowledge file.
 
     Args:
-        path: A file in the knowledge/slurm.txt format: paragraphs whose
+        path: A file in the knowledge/*.txt format: paragraphs whose
             first line is "[id] keyword, keyword, ..." followed by the text.
 
     Returns:
@@ -220,14 +231,20 @@ def build_persona(topic: str, ranked: list, budget: int) -> tuple:
 
 
 def main() -> None:
-    """Retrieve facts for the topic, build and show the persona, then start the server."""
+    """Retrieve facts for the topic, build and show the persona, then start the server.
+
+    Cards from all --knowledge files are searched together; exits if two
+    cards share an id.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--topic", required=True,
                         help='What the student needs help with, e.g. "submitting a GPU batch job"')
     parser.add_argument("--budget", type=int, default=1500,
                         help="Maximum persona length in characters (default: 1500)")
-    parser.add_argument("--knowledge", type=Path, default=HERE / "knowledge" / "slurm.txt",
-                        help="Fact card file (default: examples/example4/knowledge/slurm.txt)")
+    parser.add_argument("--knowledge", type=Path, nargs="+",
+                        default=sorted((HERE / "knowledge").glob("*.txt")),
+                        help="Fact card files (default: every .txt file in "
+                             "examples/example4/knowledge/)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Only show the retrieved cards and the persona; don't start the server")
     parser.add_argument("--no-copy", action="store_true",
@@ -239,7 +256,11 @@ def main() -> None:
                         help="Don't open the page in the browser automatically")
     args = parser.parse_args()
 
-    cards = load_cards(args.knowledge)
+    cards = [card for path in args.knowledge for card in load_cards(path)]
+    duplicates = sorted(cid for cid, n in Counter(c["id"] for c in cards).items() if n > 1)
+    if duplicates:
+        sys.exit(f"Card ids must be unique across knowledge files; repeated: {duplicates}")
+    print(f"Knowledge: {', '.join(p.name for p in args.knowledge)} ({len(cards)} cards)")
     ranked = bm25_rank(args.topic, cards)
     persona, used = build_persona(args.topic, ranked, args.budget)
 
@@ -249,7 +270,7 @@ def main() -> None:
         print(f"  {score:5.2f}  [{card['id']}]")
     if not used:
         print("  (none; the engineer will rely on the base persona only. "
-              "Try other words, or add cards to the knowledge file.)")
+              "Try other words, or add cards to a knowledge file.)")
     print(f"\nPersona ({len(persona)} characters, budget {args.budget}). In the page, paste it "
           f"into Text Prompt and pick Voice {VOICE_LABEL}:\n\n{persona}\n")
     if not args.no_copy and shutil.which("pbcopy"):

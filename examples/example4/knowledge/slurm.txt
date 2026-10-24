@@ -58,7 +58,7 @@ srun launches parallel tasks. Inside a job it starts a job step using the job's 
 [mpi] mpi, openmpi, mpich, pmix, pmi2, mpirun, parallel
 Most modern MPI libraries can be launched directly with srun through PMI2 or PMIx, so srun starts and tracks every MPI process.
 
-[salloc] salloc, interactive, allocation, shell, interactive job
+[salloc] salloc, interactive, interactive session, compute node, allocation, shell, interactive job
 salloc gives you an allocation right away and starts a shell; inside it, run your programs with srun. When you exit the shell, the allocation is released.
 
 [srun-pty] interactive, pty, shell, bash, interactive session, compute node

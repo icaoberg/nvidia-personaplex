@@ -1,0 +1,84 @@
+# Lmod knowledge base for example4: one fact card per paragraph.
+#
+# Format: the first line of a card is "[id] keywords, ...". The lines after
+# it are the card's text, which is copied into the engineer's prompt when the
+# card is retrieved. Cards are separated by a blank line; lines starting with
+# "#" are comments. Write each card as one or two spoken-style sentences: the
+# model reads them as instructions, not as a document. Card ids must be unique
+# across all files in knowledge/.
+#
+# Source: the Lmod documentation, version 9.4.5, by the Lmod project
+# (https://lmod.readthedocs.io/en/latest/): the User Guide for Lmod, Using the
+# module spider command, the Advanced User Guide for Personal Modulefiles, and
+# Module Properties. The facts are summarized in our own words. Which modules
+# exist, their versions, defaults, and markers are set by each cluster, so
+# those cards point students to their site's own modules.
+
+[lmod-overview] lmod, module, modules, environment modules, software, module system
+Lmod is the module system many clusters use to give you software. Loading a module changes your shell environment, for example adding a program to your PATH, and unloading it changes things back, without logging out.
+
+[module-avail] module avail, available, software, list software, what is installed
+module avail lists the modules you can load right now. Add part of a name to narrow it down, for example module avail python.
+
+[module-list] module list, loaded, which modules, current modules
+module list shows the modules you have loaded at the moment.
+
+[module-load] module load, load, loading, use software, version
+Load software with module load and the name, for example module load gcc. A name on its own loads the cluster's default version; add a slash and a version, like gcc slash twelve point two, to get a specific one.
+
+[default-version] default, version, which version, d marker
+In module avail, the default version of a package is usually marked with a D. The cluster chooses which version is the default, so if your work depends on a version, load it by its full name.
+
+[module-unload] module unload, unload, remove module
+Remove a module with module unload and its name.
+
+[module-swap] module swap, switch, replace, change version, change compiler
+module swap replaces one module with another in one step, for example module swap gcc intel unloads gcc and loads intel.
+
+[module-purge] module purge, purge, clean, start fresh, unload all
+module purge unloads all your modules. Modules the cluster marks as sticky are reloaded afterward.
+
+[module-reset] module reset, reset, defaults, system default
+module reset unloads everything and loads the cluster's default set of modules.
+
+[module-spider] module spider, spider, search, find software, not found, hidden
+module spider searches every module on the system, including ones that module avail doesn't show yet, such as packages that need a compiler loaded first. module spider with a name lists that package's versions, and the search ignores upper and lower case.
+
+[spider-prerequisites] module spider, prerequisites, depends, load first, cannot load, failed to load
+To find out how to load a specific version, run module spider with the name, a slash, and the version. It shows the description and which modules you need to load first, such as a compiler and an MPI library.
+
+[hierarchy] hierarchy, compiler, mpi, dependent, missing module, software hierarchy
+Many clusters use a software hierarchy: modules built with a compiler only appear after you load that compiler, and modules that need MPI only appear after you load an MPI library. If you swap compilers, Lmod reloads the matching versions of the modules that depend on it.
+
+[one-name-rule] version conflict, two versions, one name rule, replace version
+Lmod only allows one version of a package at a time. Loading a different version of something already loaded unloads the old one first.
+
+[families] family, compiler, mpi, conflict, two compilers
+Lmod also keeps you from loading two compilers, or two MPI libraries, at the same time, because their modules belong to the same family.
+
+[module-show] module show, show, what does it do, environment, path, inspect
+module show and a module name lists what the module does to your environment, such as which directories it adds to your PATH and which variables it sets.
+
+[module-help-whatis] module help, whatis, description, documentation, information
+module help and a name shows that module's help text, and module whatis shows a short description of what the package is.
+
+[module-keyword] module keyword, keyword, search description, find by topic
+module keyword searches the help and description text of all modules, which helps when you know what a program does but not its name.
+
+[ml-shorthand] ml, shorthand, shortcut, quick
+ml is a shortcut for module. ml on its own lists your loaded modules, ml and a name loads it, and ml with a minus sign before a name unloads it. Other commands work too, like ml avail and ml spider.
+
+[collections-save] module save, collection, save modules, saving, save, remember modules
+module save stores your currently loaded modules as your default collection, and module save with a name stores a named collection. Collections are kept in your home directory, under dot config slash lmod.
+
+[collections-restore] module restore, restore, collection, load saved
+module restore loads your saved default collection, or a named one if you give the name. Versions you typed when saving are kept; names without a version load whatever the current default is.
+
+[module-use] module use, personal modulefiles, own modules, modulepath, custom
+To add your own modulefiles, put them in a folder, for example modulefiles in your home directory, and run module use with that path. It's added to the front of MODULEPATH, so your modules are found before the system's.
+
+[avail-markers] markers, letters, loaded, sticky, experimental, avail legend
+The letters next to names in module avail are explained in the legend at the bottom of its output; for example, L can mean loaded, S sticky, and g built for GPUs. Each cluster can define its own letters, so check the legend.
+
+[startup-files] bashrc, profile, startup, login, every time, automatic
+To load modules every time you log in, put the module commands in your shell startup file, such as dot profile, or save them as your default collection with module save.
