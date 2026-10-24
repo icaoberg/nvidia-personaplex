@@ -219,7 +219,7 @@ Measured on an M4 Max: 72 ms per 80 ms audio frame at 4-bit (0.90× real time). 
 
 [`examples/example4/`](examples/example4) asks whether retrieval-augmented generation can make the guide more of an expert, for high-performance computing. Penelope, a student, talks with Ivan, an HPC engineer played by PersonaPlex.
 
-PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 128 fact cards summarized from the [Slurm](https://slurm.schedmd.com/documentation.html) and [Lmod](https://lmod.readthedocs.io/en/latest/) documentation, PSC's [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), the cluster's own `sinfo` output, and NVIDIA's GPU specifications, and they're added to the engineer's persona, which then runs live on your Mac as in example3.
+PersonaPlex only takes knowledge through its text prompt, once, before the conversation starts. So example4 retrieves *before* connecting: the student gives a topic, BM25 picks the best of 169 fact cards summarized from the [Slurm](https://slurm.schedmd.com/documentation.html), [Lmod](https://lmod.readthedocs.io/en/latest/) and [GROMACS](https://manual.gromacs.org/2026-rc/user-guide/index.html) documentation, PSC's [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), the cluster's own `sinfo` output, and NVIDIA's GPU specifications, and they're added to the engineer's persona, which then runs live on your Mac as in example3.
 
 ```bash
 python examples/example4/serve.py --topic "submitting a GPU batch job"

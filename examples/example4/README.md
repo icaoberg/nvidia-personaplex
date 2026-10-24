@@ -4,10 +4,11 @@ Can retrieval-augmented generation (RAG) make PersonaPlex's guide more of an exp
 - **Penelope,** a student learning to use a cluster.
 - **Ivan,** an HPC engineer, played by PersonaPlex.
 
-Ivan's expertise comes from a knowledge base summarized from three sources:
+Ivan's expertise comes from a knowledge base summarized from four sources:
 - the [Slurm](https://slurm.schedmd.com/documentation.html) documentation, for running jobs
 - the [Lmod](https://lmod.readthedocs.io/en/latest/) documentation, for loading software
 - the [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), for the specifics of PSC's Bridges-2 supercomputer
+- the [GROMACS user guide](https://manual.gromacs.org/2026-rc/user-guide/index.html), for running molecular dynamics simulations
 
 The example builds the approach that fits PersonaPlex best: **retrieve before the conversation, then prompt**. Penelope says what they need help with. The script picks the most relevant facts, builds Ivan's persona from them, and starts the live web page from [example3](../example3), running on your Mac.
 
@@ -15,8 +16,8 @@ The example builds the approach that fits PersonaPlex best: **retrieve before th
 --topic "submitting a GPU batch job"
         │
         ▼
-knowledge/slurm.txt + lmod.txt + bridges2.txt ──BM25──► best fact cards ──► Ivan's persona (≤ 1,500 chars)
-             (128 fact cards)                                                        │
+knowledge/slurm.txt + lmod.txt + bridges2.txt + gromacs.txt ──BM25──► best fact cards ──► Ivan's persona (≤ 1,500 chars)
+             (169 fact cards)                                                        │
                                                                                     ▼
                                               browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
 ```
@@ -67,6 +68,13 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
      - the GPU hardware, from NVIDIA's specifications: H100 SXM5, L40S and V100 core counts, memory and bandwidth, peak FLOPS, BF16/FP8 support (V100 has neither), and the DGX-2's NVSwitch fabric
      - GPU partitions the user guide doesn't describe, found with `sinfo` across all partitions (GPU-small, GPU-dev with an A100, ROBO and ROBO-8 with more H100s, HACC with AMD MI210s), which are probably reserved for specific projects, plus A100 and MI210 specs
      - the CPU nodes, from `sinfo` and `scontrol show node`: processors (AMD EPYC 7742 on RM and RM-512, Intel Xeon Platinum 8260M on EM), cores with no hyperthreads, usable memory (250 GB on RM nodes), node names, the RM/RM-shared overlap, partitions the guide doesn't describe (RM-small, applications, Login), Bridges-2's Slurm version (22.05) and operating system
+   - [`gromacs.txt`](knowledge/gromacs.txt): 41 cards from the GROMACS 2026-rc user guide. Every card has the keyword "gromacs", so naming GROMACS doesn't just favor the overview cards. They cover:
+     - the workflow (`pdb2gmx`, `editconf`, `solvate`, ions, `grompp`, `mdrun`), file types, and topology includes
+     - energy minimization, NVT/NPT equilibration and production
+     - the key `.mdp` options with their defaults (integrator, `dt`, `nsteps`, PME, thermostat, barostat, constraints, output, velocities)
+     - running `mdrun`: thread-MPI versus `gmx_mpi`, pinning, GPU offload and assignment, PME ranks, and reading performance
+     - checkpoints, `-maxh` before a job's time limit, appending, extending, and reproducibility
+     - the common errors and what they mean
 
    Each card is one or two spoken-style sentences, because the model follows its prompt as instructions and says things aloud. So commands are spelled the way an engineer would say them: "dash dash gres equals gpu colon two".
 2. **Retrieval:** [`serve.py`](serve.py) ranks the cards against the topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25), a standard keyword-ranking formula, in pure Python with no extra packages. Each card's keyword line counts double. Filler words ("I", "want", "my", "why") are ignored. Letters and digits stay together, so GPU names like "H100" and "A100" match as words. Simple plurals and "-ing" forms are matched: "dependencies" ↔ "dependency", "loading" ↔ "load".
@@ -80,23 +88,23 @@ Examples of what gets retrieved:
 | `submitting a GPU batch job` | sbatch, gpus, b2-login-nodes, b2-partition-chooser | 1,417 |
 | `why is my job pending` | squeue, pending-reasons | 1,102 |
 | `job arrays and dependencies` | job-arrays, dependencies, scancel, array-limits | 1,482 |
-| `my job ran out of memory` | memory, output-files, working-directory, sstat, b2-partition-rm | 1,451 |
+| `my job ran out of memory` | gmx-error-memory, memory, output-files, working-directory, sstat | 1,483 |
 | `interactive session on a compute node` | salloc, srun-pty, b2-interact, b2-login-nodes | 1,432 |
 | `loading a compiler module` | hierarchy, b2-modules, spider-prerequisites, module-swap | 1,439 |
-| `module not found` | module-spider, module-use, module-list, module-unload, lmod-overview | 1,397 |
+| `module not found` | module-spider, module-use, gmx-error-residue, gmx-error-atom-name | 1,454 |
 | `saving my modules so they load every time` | startup-files, collections-restore, collections-save, module-load, module-reset | 1,479 |
 | `loading Python and submitting a batch job` | sbatch, b2-login-nodes, module-avail, gpus (all three files) | 1,316 |
 | `submitting a GPU job on Bridges-2` | sbatch, b2-partition-chooser, b2-login-nodes, b2-ondemand, b2-benchmark | 1,463 |
 | `an interactive session on Bridges-2` | b2-interact, salloc, srun-pty, b2-interact-gpu | 1,483 |
-| `transferring files to Bridges-2` | b2-transfer, b2-globus, b2-retention, sbcast | 1,150 |
-| `where should I store large files on Bridges-2` | b2-project, b2-cpu-rm512-nodes | 1,156 |
+| `transferring files to Bridges-2` | b2-transfer, b2-globus, b2-retention | 1,016 |
+| `where should I store large files on Bridges-2` | b2-project, b2-cpu-rm512-nodes, b2-globus | 1,282 |
 | `how many SUs do I have left` | b2-projects-command | 721 |
-| `which partition should I use on Bridges-2` | b2-partition-chooser, b2-cpu-rm-overlap, b2-cpu-rm-nodes | 1,410 |
-| `what is the maximum time limit on Bridges-2` | b2-partition-time-limits, time-limit, b2-partition-rm, b2-partition-gpu | 1,457 |
+| `which partition should I use on Bridges-2` | b2-partition-chooser, b2-cpu-rm-overlap, b2-partition-names, b2-gpu-hw-compare | 1,489 |
+| `what is the maximum time limit on Bridges-2` | b2-partition-time-limits, gmx-maxh, time-limit, b2-partition-rm | 1,456 |
 | `running a job that needs a lot of memory on Bridges-2` | b2-partition-rm512, b2-partition-rm, b2-partition-em, b2-cpu-usable-memory, sstat | 1,447 |
 | `how much does a GPU job cost` | b2-gpu-partition-example, b2-gpu-chooser, b2-gpu-shared-example | 1,407 |
 | `which GPU should I use on Bridges-2` | b2-gpu-hw-compare, b2-gpu-chooser, b2-gpu-types | 1,452 |
-| `how fast are the H100s` | b2-gpu-hw-h100-speed, b2-gpu-h100, b2-gpu-hw-h100 | 1,342 |
+| `how fast are the H100s` | b2-gpu-hw-h100-speed, gmx-performance, b2-gpu-h100 | 1,275 |
 | `does the V100 support bf16` | b2-gpu-hw-v100-precision, b2-gpu-hw-h100, b2-gpu-hw-l40s-speed, b2-gpu-v100-16 | 1,466 |
 | `using the DGX-2` | b2-gpu-hw-dgx2, b2-gpu-dgx2, b2-gpu-nodes | 1,464 |
 | `is there an A100` | b2-gpu-hw-a100, b2-other-gpu-partitions | 1,324 |
@@ -104,7 +112,14 @@ Examples of what gets retrieved:
 | `how much memory can I ask for on an RM node` | b2-cpu-usable-memory, b2-rm-shared-example, b2-partition-rm512, b2-cpu-rm512-nodes | 1,492 |
 | `what version of Slurm does Bridges-2 run` | b2-slurm-version, one-name-rule, default-version, module-load | 1,384 |
 | `what does drain mean in sinfo` | sinfo-states | 885 |
-| `kubernetes` | none: the knowledge base is about Slurm, Lmod and Bridges-2, so it uses the base persona | 588 |
+| `setting up a protein simulation in GROMACS` | gmx-workflow, gmx-mdrun, gmx-editconf, gmx-overview | 1,344 |
+| `running GROMACS on a GPU` | gmx-gpu-assign, gmx-gpu-offload, gmx-pme-ranks, gmx-reproducibility | 1,456 |
+| `my GROMACS simulation is blowing up` | gmx-error-blowup, gmx-mdrun, gmx-workflow, gmx-overview | 1,411 |
+| `continuing a GROMACS run from a checkpoint` | gmx-checkpoint, gmx-append, gmx-mdrun, gmx-gen-vel | 1,406 |
+| `running GROMACS across multiple nodes` | gmx-mpi, b2-gpu-partition-example, gmx-gpu-assign | 1,314 |
+| `making sure GROMACS stops before the time limit` | gmx-maxh | 816 |
+| `residue not found in residue topology database` | gmx-error-residue | 834 |
+| `kubernetes` | none: the knowledge base doesn't cover it, so it uses the base persona | 588 |
 
 Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are searched by default, general topics pick up Bridges-2 specifics too: "submitting a GPU batch job" gets Slurm's general GPU card *and* the Bridges-2 partition chooser. That's what a Bridges-2 student wants. For any other cluster, search only the general files: `--knowledge examples/example4/knowledge/slurm.txt examples/example4/knowledge/lmod.txt`.
 
@@ -114,7 +129,7 @@ Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are
 
 ```
 --topic "submitting a GPU batch job"
-   → tokenize → BM25 ranking over 128 fact cards (all knowledge/*.txt) → best cards
+   → tokenize → BM25 ranking over 169 fact cards (all knowledge/*.txt) → best cards
    → base persona + cards (≤ 1,500 chars) → printed and copied
    → personaplex_mlx.local_web → browser at localhost:8998 (mic in, voice out)
 ```
@@ -127,6 +142,7 @@ Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are
 | [`knowledge/slurm.txt`](knowledge/slurm.txt) | 33 Slurm fact cards, one per paragraph |
 | [`knowledge/lmod.txt`](knowledge/lmod.txt) | 23 Lmod fact cards, one per paragraph |
 | [`knowledge/bridges2.txt`](knowledge/bridges2.txt) | 72 Bridges-2 fact cards, one per paragraph, specific to PSC's cluster |
+| [`knowledge/gromacs.txt`](knowledge/gromacs.txt) | 41 GROMACS fact cards, one per paragraph |
 | [`serve.py`](serve.py) | The program: retrieves cards, builds the persona, and starts the live server |
 
 ### The knowledge files: `knowledge/*.txt`
@@ -183,7 +199,7 @@ These are BM25's standard parameter values. It's pure Python, with no extra pack
 | [`nvidia/personaplex-7b-v1`](https://huggingface.co/nvidia/personaplex-7b-v1) on Hugging Face | NVIDIA's model weights, the voice prompts, and the web page itself. They download on first use and are cached in `~/.cache/huggingface`. |
 | The browser page | Where the student pastes the persona into **Text Prompt**, picks **Voice** `NATURAL_F2`, clicks **Connect**, and talks. The page's own Text Prompt box takes precedence over `serve.py`'s `--text-prompt`, which is why you paste the persona. |
 | [example3](../example3) | The live setup this example builds on |
-| [Slurm documentation](https://slurm.schedmd.com/documentation.html), [Lmod documentation](https://lmod.readthedocs.io/en/latest/), [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), [ACCESS resource listing](https://cider.access-ci.org/public/resources/RDR_000646), NVIDIA's [H100](https://www.nvidia.com/en-us/data-center/h100/) and [L40S](https://www.nvidia.com/en-us/data-center/l40s/) specifications and V100/DGX-2 datasheets, and `sinfo` on Bridges-2 | The sources of the knowledge base; `bridges2.txt` cites each one at the top |
+| [Slurm documentation](https://slurm.schedmd.com/documentation.html), [Lmod documentation](https://lmod.readthedocs.io/en/latest/), [Bridges-2 User Guide](https://www.psc.edu/resources/bridges-2/user-guide/), [ACCESS resource listing](https://cider.access-ci.org/public/resources/RDR_000646), NVIDIA's [H100](https://www.nvidia.com/en-us/data-center/h100/) and [L40S](https://www.nvidia.com/en-us/data-center/l40s/) specifications and V100/DGX-2 datasheets, `sinfo` on Bridges-2, and the [GROMACS user guide](https://manual.gromacs.org/2026-rc/user-guide/index.html) | The sources of the knowledge base; `bridges2.txt` cites each one at the top |
 
 ## Running
 
@@ -253,4 +269,4 @@ This is a small, informal test (one question, three seeds) on the 4-bit MLX mode
 - **The persona length is a tradeoff.** More cards means more facts, but a longer prompt, and possibly a less coherent engineer. 1,500 characters is a starting point, not a tested optimum. Try `--budget 1000` or `--budget 2500` and compare.
 - **Retrieval is keyword-based.** BM25 matches words, not meaning: "GPU" finds the GPU card because "gpu" is in its keywords, but a word that's in no card finds nothing. For larger knowledge bases, embedding search (e.g. a small sentence-embedding model) would catch synonyms, at the cost of an extra dependency.
 - **One topic per session.** To change topics, stop the server and start it again with a new `--topic` (option 2 above).
-- **The knowledge base reflects Slurm 26.05, Lmod 9.4.5, and the Bridges-2 User Guide as of October 2026.** Bridges-2 itself runs Slurm 22.05.11, so a few options in `slurm.txt` may not exist there; the `b2-slurm-version` card tells students to check `man sbatch` on the cluster. Commands rarely change, but Bridges-2 partitions, limits and SU rates do; PSC was also preparing to move Bridges-2 to a new datacenter. Check the current guide for anything that matters.
+- **The knowledge base reflects Slurm 26.05, Lmod 9.4.5, GROMACS 2026-rc (a release candidate), and the Bridges-2 User Guide as of October 2026.** Bridges-2 itself runs Slurm 22.05.11, so a few options in `slurm.txt` may not exist there; the `b2-slurm-version` card tells students to check `man sbatch` on the cluster. Commands rarely change, but Bridges-2 partitions, limits and SU rates do; PSC was also preparing to move Bridges-2 to a new datacenter. Check the current guide for anything that matters.

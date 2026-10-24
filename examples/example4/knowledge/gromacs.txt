@@ -1,0 +1,140 @@
+# GROMACS knowledge base for example4: one fact card per paragraph.
+#
+# Format: the first line of a card is "[id] keywords, ...". The lines after
+# it are the card's text, which is copied into the engineer's prompt when the
+# card is retrieved. Cards are separated by a blank line; lines starting with
+# "#" are comments. Write each card as one or two spoken-style sentences: the
+# model reads them as instructions, not as a document. Card ids must be unique
+# across all files in knowledge/.
+#
+# Source: the GROMACS 2026-rc user guide
+# (https://manual.gromacs.org/2026-rc/user-guide/index.html): Getting started,
+# Flow chart, System preparation, Molecular dynamics parameters (.mdp
+# options), Getting good performance from mdrun, Managing long simulations,
+# and Common errors. The facts are summarized in our own words. 2026-rc is a
+# release candidate; check the documentation for the version installed on
+# your cluster. These cards are about GROMACS in general, not about how a
+# particular cluster installs it.
+
+[gmx-overview] gromacs, gmx, molecular dynamics, md, simulation, what is gromacs, version
+GROMACS is a molecular dynamics package, and all its tools run through one command, gmx, followed by the tool name, like gmx mdrun. Run gmx dash version to check that it's available and which version you have.
+
+[gmx-workflow] gromacs, workflow, steps, pipeline, how to run, protein, tutorial, getting started
+A typical GROMACS run of a protein in water goes: gmx pdb2gmx makes a topology from a PDB file, gmx editconf sets up the box, gmx solvate adds water, gmx grompp combines everything with your parameters into a run file, and gmx mdrun runs the simulation.
+
+[gmx-pdb2gmx] gromacs, pdb2gmx, topology, pdb, force field, gro, top, convert structure
+gmx pdb2gmx turns a PDB structure of a protein or peptide into a GROMACS topology, a dot top file, and a coordinate file, a dot gro file, using the force field you choose.
+
+[gmx-editconf] gromacs, editconf, box, box size, center, unit cell
+gmx editconf defines the simulation box around your molecule, setting its size and where the molecule sits in it.
+
+[gmx-solvate] gromacs, solvate, water, solvent, fill box, add water
+gmx solvate fills the box with solvent, usually water, and updates the topology so it includes the new molecules.
+
+[gmx-ions] gromacs, ions, neutralize, counter ions, net charge, salt, insert-molecules
+After solvating, add counter-ions so the system's net charge is zero, and make sure the topology lists the same molecules as the coordinate file. gmx insert-molecules can place extra molecules into the box.
+
+[gmx-grompp] gromacs, grompp, tpr, run input, preprocess, mdp, index, ndx
+gmx grompp combines the structure, the topology, the parameter file, a dot mdp file, and optionally an index file into one run input file, a dot tpr file, which has everything needed to start a run.
+
+[gmx-mdrun] gromacs, mdrun, run simulation, tpr, start simulation, gmx mdrun
+gmx mdrun runs the simulation from a dot tpr file. It writes a trajectory, an energy file, a log file, and checkpoint files you can restart from.
+
+[gmx-files] gromacs, file types, extensions, gro, top, itp, mdp, tpr, xtc, trr, edr, log, cpt, ndx
+GROMACS file types: dot gro and dot pdb hold coordinates, dot top and dot itp the topology, dot mdp the run parameters, dot ndx atom groups, dot tpr the run input, dot xtc and dot trr trajectories, dot edr energies, dot log the run log, and dot cpt checkpoints.
+
+[gmx-topology-include] gromacs, topology, include, itp, ifdef, posres, define, preprocessor
+A topology can pull in other files with pound include, such as dot itp files, and switch parts on and off with pound ifdef. For example, putting define equals dash DPOSRES in the mdp file turns on the position restraints in posre dot itp.
+
+[gmx-energy-minimization] gromacs, energy minimization, minimize, em, steep, steepest descent, cg, bad contacts
+Always run energy minimization before dynamics to remove bad contacts: set integrator to steep, for steepest descent, or cg, for conjugate gradient, in the mdp file, then run grompp and mdrun. You may need a few minimization rounds.
+
+[gmx-equilibration] gromacs, equilibration, nvt, npt, position restraints, equilibrate, density, temperature
+After minimization, equilibrate: first NVT with position restraints on the solute to reach the target temperature, then NPT to settle the density, using the C-rescale barostat, and only then the production run. Check energies with gmx energy before production.
+
+[gmx-production] gromacs, production run, production, gen-vel, velocities, continue from equilibration
+For the production run, use parameters consistent with your force field and don't generate new velocities; continue from the equilibrated state instead.
+
+[gmx-mdp-basics] gromacs, mdp, integrator, dt, nsteps, timestep, time step, run length, md, sd
+In the mdp file, integrator md is the default leap-frog dynamics and sd is stochastic dynamics. The time step dt defaults to 0.001 picoseconds, nsteps sets how many steps to run, and nsteps equals minus one means no limit.
+
+[gmx-mdp-electrostatics] gromacs, cutoff-scheme, verlet, pme, coulombtype, rcoulomb, rvdw, cutoff, electrostatics
+Use cutoff dash scheme Verlet, the only supported scheme, and coulombtype PME for long-range electrostatics. rcoulomb and rvdw, the cut-offs, both default to 1 nanometer.
+
+[gmx-mdp-thermostat] gromacs, tcoupl, thermostat, temperature coupling, v-rescale, tc-grps, tau-t, ref-t, temperature
+For temperature, set tcoupl to v-rescale, which gives a proper canonical ensemble, and list the groups in tc dash grps, with one tau dash t time constant in picoseconds and one ref dash t temperature in kelvin per group.
+
+[gmx-mdp-barostat] gromacs, pcoupl, barostat, pressure coupling, c-rescale, parrinello-rahman, tau-p, ref-p, compressibility, pressure
+For pressure, set pcoupl to C-rescale, which works for both equilibration and production. tau dash p defaults to 5 picoseconds, ref dash p is the pressure in bar, and compressibility for water is about 4.5 times ten to the minus five per bar.
+
+[gmx-mdp-constraints] gromacs, constraints, h-bonds, lincs, shake, bond constraints
+constraints equals h dash bonds turns bonds to hydrogen atoms into constraints, solved by LINCS by default, which is faster and more stable than SHAKE.
+
+[gmx-mdp-output] gromacs, output, nstxout-compressed, xtc, trajectory frequency, save frames
+Set nstxout dash compressed to write coordinates to the compressed dot xtc trajectory every that many steps; the default of zero writes none.
+
+[gmx-gen-vel] gromacs, gen-vel, gen-temp, velocities, maxwell, initial velocities
+gen dash vel equals yes generates starting velocities at gen dash temp, 300 kelvin by default. Use it at the start of equilibration, not when continuing a run.
+
+[gmx-energy-tool] gromacs, gmx energy, edr, energy file, plot energy, temperature, pressure, analysis
+gmx energy reads the dot edr energy file and gives plots, averages, and fluctuations of energies, temperature, pressure, and density.
+
+[gmx-threads] gromacs, ntmpi, ntomp, nt, threads, openmp, thread-mpi, ranks, cores
+On one node, gmx mdrun uses built-in thread-MPI: dash ntmpi sets the number of ranks, dash ntomp the OpenMP threads per rank, and dash nt the total. By default it uses all available cores; OMP_NUM_THREADS is respected if set.
+
+[gmx-mpi] gromacs, gmx_mpi, mpi, mpirun, srun, multiple nodes, multi-node, ranks
+To run across several nodes, use the MPI build, gmx underscore mpi, started by your MPI launcher, such as mpirun, or srun under Slurm. The launcher sets the number of ranks, so don't use dash ntmpi or dash nt with it.
+
+[gmx-pinning] gromacs, pin, pinning, affinity, thread pinning, pin on, inherit
+dash pin controls thread pinning: auto pins when you use the whole node, on always pins, and inherit keeps the scheduler's affinity. When sharing a node, let the job scheduler set affinity, or performance can suffer badly.
+
+[gmx-gpu-offload] gromacs, gpu, nb gpu, pme gpu, bonded gpu, update gpu, offload, gpu resident, cuda
+gmx mdrun can move work to the GPU with dash nb gpu for short-range forces, dash pme gpu for long-range electrostatics, dash bonded gpu, and dash update gpu. A fully GPU-resident run on one GPU looks like gmx mdrun dash ntmpi one dash nb gpu dash pme gpu dash bonded gpu dash update gpu.
+
+[gmx-gpu-assign] gromacs, gpu_id, gputasks, multiple gpus, gpu assignment, ranks per gpu
+To choose GPUs, use dash gpu underscore id with a list of GPU numbers, or dash gputasks to map each task to a GPU, but not both. One to three ranks per GPU usually works best, and one rank per GPU for GPU-resident runs.
+
+[gmx-pme-ranks] gromacs, npme, pme ranks, separate pme, pme gpu, tune_pme
+dash npme sets how many ranks do only long-range PME work; by default mdrun chooses. When PME runs on a GPU, use just one PME rank, dash npme one.
+
+[gmx-performance] gromacs, performance, ns/day, speed, how fast, md.log, benchmark, resethway
+mdrun reports performance at the end of the md dot log file, in nanoseconds per day, along with a timing table. Adding dash resethway resets the counters halfway, so startup time doesn't skew a benchmark.
+
+[gmx-checkpoint] gromacs, checkpoint, cpt, cpi, restart, continue, state.cpt, resume, continuing
+mdrun writes checkpoints, by default to state dot cpt, keeping the previous one as state underscore prev dot cpt; dash cpt sets how often. To continue an interrupted run exactly, start mdrun again with dash cpi state dot cpt.
+
+[gmx-maxh] gromacs, maxh, walltime, time limit, job time limit, stop before limit, slurm
+Use mdrun's dash maxh option with your job's time limit in hours, so mdrun stops cleanly and writes a checkpoint before the scheduler kills the job; then continue in a new job with dash cpi.
+
+[gmx-append] gromacs, append, noappend, part files, output files, continuation, deffnm
+When continuing from a checkpoint, mdrun appends to the old output files by default; dash noappend writes new files with part numbers instead. Appending fails if the old files were changed or removed, and if the first run used dash deffnm, use it again.
+
+[gmx-extend] gromacs, extend, longer run, convert-tpr, more steps, until
+To make a finished run longer, run gmx convert dash tpr with dash extend to make a new dot tpr file, then gmx mdrun dash s with that file and dash cpi state dot cpt.
+
+[gmx-reproducibility] gromacs, reproducible, reproducibility, different results, reprod, identical
+GROMACS runs aren't bit-for-bit reproducible across different core counts, hardware, or GPUs, but averaged results are. For identical results on identical hardware and inputs, use mdrun dash reprod.
+
+[gmx-error-residue] gromacs, residue not found, residue topology database, rtp, pdb2gmx error, unknown residue
+The pdb2gmx error residue not found in residue topology database means your force field has no entry with that residue name. Rename the residue to one the force field knows, or get a topology for it elsewhere.
+
+[gmx-error-atom-name] gromacs, atom not found in rtp entry, atom names, pdb2gmx error, missing atoms, names do not match
+The pdb2gmx error atom not found in rtp entry means atom names in your structure don't match the force field's names for that residue. Rename the atoms or fix the structure.
+
+[gmx-error-directives] gromacs, second defaults directive, invalid order for directive, topology error, include order
+The grompp errors found a second defaults directive and invalid order for directive mean the topology is mixed up: the defaults section must appear once, at the top, and atom types must come before any molecule type. Don't mix force fields.
+
+[gmx-error-charge] gromacs, net charge, non-zero charge, total charge, grompp warning, neutralize
+If grompp says the system has a non-zero total charge, a non-integer charge means a topology error, while a whole number means you should add counter-ions.
+
+[gmx-error-blowup] gromacs, lincs warning, blowing up, crash, particles moved, settle, shake, exploding, unstable
+LINCS or SETTLE warnings and messages that particles moved too far mean the system is blowing up. Minimize and equilibrate more carefully, check the topology, and try a smaller time step.
+
+[gmx-error-box] gromacs, cut-off longer than half, box too small, box vector, periodic images
+The error the cut-off length is longer than half the shortest box vector means the box is too small, so atoms would see their own periodic images. Make the box bigger, allowing room for pressure coupling.
+
+[gmx-error-memory] gromacs, out of memory, memory error, allocating, angstrom, nanometer, units
+Out of memory errors mean GROMACS ran out of RAM. Analyze fewer atoms or a shorter trajectory, and check you didn't mix up angstroms and nanometers, which makes boxes far too large.
+
+[gmx-maxwarn] gromacs, maxwarn, warnings, ignore warnings, grompp warnings
+Don't silence grompp warnings with dash maxwarn unless you understand them; ignoring them usually leads to a run that fails or gives wrong results.
