@@ -102,7 +102,9 @@ Options:
 | `my_prompts.txt` (positional) | Use a different prompts file |
 | `--device mps` | Try the Apple GPU. Untested upstream; it sets `PYTORCH_ENABLE_MPS_FALLBACK=1` so unsupported ops fall back to the CPU. |
 | `--say-voice NAME` | macOS voice for your lines, e.g. `Samantha`. List voices with `say -v '?'`. |
+| `--gap SECONDS` | Silence between voices in `conversation.wav` (default `0.5`) |
 | `--input-only` | Only build `input.wav`, without running the model |
+| `--mix-only` | Remake `conversation.wav` and `conversation_live.wav` from an existing `agent.wav`, without rerunning the model. Use it to try a different `--gap`. |
 | `--seed N` | Random seed (default `42424242`) |
 | `--out-dir DIR` | Output folder (default `example1/output`) |
 
@@ -114,7 +116,8 @@ Everything goes to `example1/output/`, which git ignores:
 |---|---|
 | `input.wav` | Your lines as speech, with the pauses |
 | `agent.wav` | **The agent's reply audio**, the same length as `input.wav` |
-| `conversation.wav` | Stereo mix to listen to both sides: you on the left, the agent on the right |
+| `conversation.wav` | **The conversation one voice at a time:** each of your turns, 0.5 s of silence (`--gap`), the agent's full answer, 0.5 s, the next turn. Agent sounds made entirely while you were speaking ("okay", "right") are left out. |
+| `conversation_live.wav` | Stereo, time-aligned, as the model actually heard and answered: you on the left, the agent on the right. The voices can overlap. |
 | `transcript.txt` | What the agent said, as text |
 | `agent.json` | The agent's raw text tokens from `moshi.offline` |
 
@@ -136,5 +139,5 @@ open example1/output/conversation.wav
 ## Tips
 
 - **Too little time to answer?** PersonaPlex only talks while there is input audio. If the agent gets cut off, increase `pause:`.
-- **The agent talks over you.** That's expected. It's full-duplex, so it can interrupt or make "mm-hm" sounds while you speak, like a person would.
+- **The agent talks over you.** That's expected. It's full-duplex, so it can interrupt, run its answer into your next turn, or make "mm-hm" sounds while you speak, like a person would. `conversation.wav` takes the voices apart so they never overlap; `conversation_live.wav` keeps the real timing.
 - **Different answers each run?** Change `--seed`. Keep it fixed to reproduce a result.

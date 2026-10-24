@@ -36,6 +36,10 @@ SAMPLE_RATE = 24000  # PersonaPlex (Mimi) sample rate
 LEAD_IN_SECONDS = 1.0  # silence before the first user turn
 MIN_MEMORY_GB = 24  # ~15 GB of BF16 weights plus macOS and the audio codec
 SPECIAL_TOKENS = {"EPAD", "BOS", "EOS", "PAD"}
+FRAME = SAMPLE_RATE // 20  # 50 ms frames for speech detection
+SPEECH_RMS = 0.01  # frames louder than this count as speech
+MIN_GAP_SECONDS = 0.4  # shorter silences stay inside one speech segment
+PAD_SECONDS = 0.1  # kept around each clip so word onsets aren't cut
 HERE = Path(__file__).resolve().parent
 
 
@@ -170,9 +174,14 @@ def silence(seconds: float) -> np.ndarray:
     return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
 
 
-def build_input(turns: list, say_voice: str) -> np.ndarray:
-    """Concatenate the user's turns, each followed by its pause."""
+def build_input(turns: list, say_voice: str) -> tuple:
+    """Concatenate the user's turns, each followed by its pause.
+
+    Returns the audio and the (start, end) sample span of each turn.
+    """
     pieces = [silence(LEAD_IN_SECONDS)]
+    spans = []
+    position = len(pieces[0])
     with tempfile.TemporaryDirectory() as tmp:
         for i, turn in enumerate(turns):
             if turn["kind"] == "text":
@@ -181,9 +190,29 @@ def build_input(turns: list, say_voice: str) -> np.ndarray:
             else:
                 print(f"  [audio] {turn['value']}")
                 wav = turn["value"]
-            pieces.append(load_mono(str(wav)))
-            pieces.append(silence(turn["pause"]))
-    return np.concatenate(pieces)
+            speech = load_mono(str(wav))
+            spans.append((position, position + len(speech)))
+            pieces += [speech, silence(turn["pause"])]
+            position += len(speech) + len(pieces[-1])
+    return np.concatenate(pieces), spans
+
+
+def speech_segments(pcm: np.ndarray) -> list:
+    """(start, end) sample spans where `pcm` is louder than SPEECH_RMS.
+
+    Gaps shorter than MIN_GAP_SECONDS are merged, so pauses between words
+    and sentences stay inside one segment.
+    """
+    n = len(pcm) // FRAME
+    rms = np.sqrt((pcm[:n * FRAME].reshape(n, FRAME) ** 2).mean(axis=1))
+    segments = []
+    for i in np.flatnonzero(rms > SPEECH_RMS):
+        start, end = i * FRAME, (i + 1) * FRAME
+        if segments and start - segments[-1][1] < MIN_GAP_SECONDS * SAMPLE_RATE:
+            segments[-1][1] = end
+        else:
+            segments.append([start, end])
+    return [tuple(s) for s in segments]
 
 
 def run_personaplex(args, prompts: dict, input_wav: Path, agent_wav: Path, agent_json: Path):
@@ -219,14 +248,61 @@ def write_transcript(agent_json: Path, transcript: Path) -> str:
     return text
 
 
-def write_conversation(user: np.ndarray, agent_wav: Path, out: Path):
-    """Stereo mix: user on the left channel, agent on the right."""
-    agent = load_mono(str(agent_wav))
+def write_live_mix(user: np.ndarray, agent: np.ndarray, out: Path):
+    """Stereo, time-aligned: user on the left, agent on the right, as the
+    model heard and answered them (the voices can overlap)."""
     length = max(len(user), len(agent))
     stereo = np.zeros((2, length), dtype=np.float32)
     stereo[0, :len(user)] = user
     stereo[1, :len(agent)] = agent
     sphn.write_wav(str(out), stereo, SAMPLE_RATE)
+
+
+def write_turn_mix(user: np.ndarray, spans: list, agent: np.ndarray, out: Path,
+                   gap: float) -> int:
+    """Mono, one voice at a time: each user turn, `gap` seconds of silence,
+    the agent's answer, `gap` seconds, the next turn.
+
+    PersonaPlex is full-duplex, so its answers can run into the next user
+    turn and it makes short sounds ("okay", "right") while the user talks.
+    Each agent segment is placed by when it starts: before the first turn,
+    it opens the conversation; during or after a turn, it is that turn's
+    answer and is kept whole, unless it also ends before the user stops
+    talking (a backchannel), in which case it is dropped.
+    Returns the number of dropped segments.
+    """
+    pad = int(PAD_SECONDS * SAMPLE_RATE)
+
+    turns = []  # user speech bounds, without say's leading/trailing silence
+    for start, end in spans:
+        segments = speech_segments(user[start:end]) or [(0, end - start)]
+        turns.append((start + segments[0][0], start + segments[-1][1]))
+
+    opening, answers, dropped = [], [[] for _ in turns], 0
+    for start, end in speech_segments(agent):
+        if start < turns[0][0]:
+            opening.append((start, end))
+            continue
+        i = max(j for j, (turn_start, _) in enumerate(turns) if turn_start <= start)
+        if end <= turns[i][1]:
+            dropped += 1
+        else:
+            answers[i].append((start, end))
+
+    def clip(pcm, segments):
+        return pcm[max(segments[0][0] - pad, 0):segments[-1][1] + pad]
+
+    # Each clip carries `pad` of near-silence on both ends; count it in the gap.
+    between = silence(max(gap - 2 * PAD_SECONDS, 0))
+    pieces = [silence(gap)]
+    if opening:
+        pieces += [clip(agent, opening), between]
+    for turn, answer in zip(turns, answers):
+        pieces += [clip(user, [turn]), between]
+        if answer:
+            pieces += [clip(agent, answer), between]
+    sphn.write_wav(str(out), np.concatenate(pieces), SAMPLE_RATE)
+    return dropped
 
 
 def main():
@@ -240,8 +316,13 @@ def main():
     parser.add_argument("--seed", type=int, default=42424242)
     parser.add_argument("--say-voice", default="",
                         help="macOS voice for your lines, e.g. Samantha (see `say -v '?'`)")
+    parser.add_argument("--gap", type=float, default=0.5,
+                        help="Seconds of silence between turns in conversation.wav (default: 0.5)")
     parser.add_argument("--input-only", action="store_true",
                         help="Only build input.wav; don't run the model")
+    parser.add_argument("--mix-only", action="store_true",
+                        help="Remake the conversation mixes from an existing agent.wav; "
+                             "don't run the model")
     args = parser.parse_args()
 
     check_mac()
@@ -254,20 +335,29 @@ def main():
     print(f"Voice: {prompts['voice']}")
     print(f"Role:  {prompts['role'] or '(upstream default)'}")
     print(f"Building {input_wav} from {len(prompts['turns'])} user turns:")
-    user = build_input(prompts["turns"], args.say_voice)
+    user, spans = build_input(prompts["turns"], args.say_voice)
     sphn.write_wav(str(input_wav), user, SAMPLE_RATE)
     print(f"Wrote {input_wav} ({len(user) / SAMPLE_RATE:.1f} s)")
 
     if args.input_only:
         return
-    check_model_access()
-    run_personaplex(args, prompts, input_wav, agent_wav, agent_json)
+    if args.mix_only:
+        if not agent_wav.exists():
+            sys.exit(f"{agent_wav} not found; run without --mix-only first.")
+    else:
+        check_model_access()
+        run_personaplex(args, prompts, input_wav, agent_wav, agent_json)
     text = write_transcript(agent_json, args.out_dir / "transcript.txt")
-    write_conversation(user, agent_wav, args.out_dir / "conversation.wav")
+    agent = load_mono(str(agent_wav))
+    write_live_mix(user, agent, args.out_dir / "conversation_live.wav")
+    dropped = write_turn_mix(user, spans, agent, args.out_dir / "conversation.wav", args.gap)
 
     print("\nAgent said:\n  " + (text or "(nothing)"))
+    print(f"\nconversation.wav: one voice at a time, {args.gap:g} s between turns "
+          f"({dropped} agent sounds made while you spoke were left out)")
     print(f"\nResults in {args.out_dir}/:")
-    for name in ["input.wav", "agent.wav", "conversation.wav", "transcript.txt", "agent.json"]:
+    for name in ["input.wav", "agent.wav", "conversation.wav", "conversation_live.wav",
+                 "transcript.txt", "agent.json"]:
         print(f"  {name}")
 
 
