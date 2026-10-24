@@ -42,7 +42,18 @@ hf_cache/
 output.wav
 output.json
 outputs/
+
+# example1: default output folder (run_example.py --out-dir)
 example*/output/
+# example1: generated files if --out-dir points inside example1/
+example1/**/input.wav
+example1/**/agent.wav
+example1/**/agent.json
+example1/**/conversation.wav
+example1/**/transcript.txt
+# example1: per-turn text-to-speech clips (normally in a system temp dir)
+example1/**/turn[0-9][0-9].wav
+example1/**/tmp*/
 
 # Node (web client)
 node_modules/
