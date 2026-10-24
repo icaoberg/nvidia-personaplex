@@ -13,12 +13,20 @@ way moshi.server does for each connection:
   3. The speech from each turn is cut out and joined one voice at a time,
      with a short gap between voices, so they never overlap.
 
+Outputs (in example2/output/ by default):
+
+  conversation.wav   the whole conversation, one voice at a time
+  transcript.txt     who said what, from the model's text stream
+  turns/NN_student.wav, turns/NN_guide.wav   each turn's clip
+  config.json        the prompts and settings used for this run
+  voices/            CPU copies of the two voice prompts
+
 Run it inside the `personaplex` conda environment (see ../environment.yml),
 logged in to Hugging Face with the model license accepted:
 
   python example2/run_example.py
   python example2/run_example.py --gap 1          # longer silence between voices
-  python example2/run_example.py --device mps     # Apple GPU (untested upstream)
+  python example2/run_example.py --device mps     # Apple GPU (slow; see README)
 """
 
 import argparse
@@ -52,11 +60,24 @@ HERE = Path(__file__).resolve().parent
 
 
 def sysctl(name: str) -> str:
+    """Read a macOS system setting with `sysctl -n`.
+
+    Args:
+        name: The sysctl key, e.g. "machdep.cpu.brand_string" or "hw.memsize".
+
+    Returns:
+        The value as a string, or "" if the key doesn't exist.
+    """
     return subprocess.run(["sysctl", "-n", name], capture_output=True, text=True).stdout.strip()
 
 
-def check_mac():
-    """Require macOS on Apple Silicon; warn if this isn't an M4 or memory is low."""
+def check_mac() -> None:
+    """Require macOS on Apple Silicon; warn if this isn't an M4 or memory is low.
+
+    Prints the chip, memory, and macOS version. Exits if this isn't macOS on
+    arm64; only warns (on stderr) for a non-M4 chip or less than
+    MIN_MEMORY_GB of memory.
+    """
     if sys.platform != "darwin" or platform.machine() != "arm64":
         sys.exit("This example targets a MacBook Pro M4 (macOS on Apple Silicon).")
     chip = sysctl("machdep.cpu.brand_string")
@@ -70,8 +91,13 @@ def check_mac():
               file=sys.stderr)
 
 
-def check_model_access():
-    """Fail early, with instructions, if the gated model can't be downloaded."""
+def check_model_access() -> None:
+    """Fail early, with instructions, if the gated model can't be downloaded.
+
+    Downloads the model's small config.json. If Hugging Face denies access
+    (no login, or the license isn't accepted), exits with the steps to fix
+    it before the 17 GB model starts loading.
+    """
     from huggingface_hub import hf_hub_download
     from huggingface_hub.utils import GatedRepoError
 
@@ -93,6 +119,15 @@ def cpu_voice_prompt(voice: str, out_dir: Path) -> Path:
     The published voice files were saved from a CUDA GPU, and moshi loads them
     with torch.load(path) and no map_location, which fails on a Mac. A copy
     saved from the CPU loads anywhere. (Same workaround as example1.)
+
+    Args:
+        voice: Voice name without ".pt", e.g. "NATM1".
+        out_dir: Output folder; the copy goes in out_dir/voices/.
+
+    Returns:
+        Path to the copied .pt file, for PersonaPlex.respond().
+
+    Exits if `voice` isn't one of the published voices.
     """
     import torch
     from huggingface_hub import hf_hub_download
@@ -115,7 +150,23 @@ def cpu_voice_prompt(voice: str, out_dir: Path) -> Path:
 
 
 def parse_prompts(path: Path) -> dict:
-    """Parse the key: value prompts file."""
+    """Parse the key: value prompts file.
+
+    See prompts.txt for the format. Repeated `student_role:` and
+    `guide_role:` lines are joined with spaces; each `question:` line is one
+    question, in order.
+
+    Args:
+        path: The prompts file.
+
+    Returns:
+        {"student_voice": str, "guide_voice": str, "student_role": str,
+        "guide_role": str, "question": list[str], "answer_time": float},
+        with defaults for anything the file leaves out.
+
+    Exits, naming the line, on a malformed line or an unknown key, or if
+    there are no questions.
+    """
     config = {"student_voice": "NATM1", "guide_voice": "NATF2",
               "student_role": [], "guide_role": [], "question": [],
               "answer_time": 15.0}
@@ -146,14 +197,23 @@ def parse_prompts(path: Path) -> dict:
 
 
 def silence(seconds: float) -> np.ndarray:
+    """Return `seconds` of silence as float32 samples at SAMPLE_RATE."""
     return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
 
 
 def speech_segments(pcm: np.ndarray) -> list:
     """(start, end) sample spans where `pcm` is louder than SPEECH_RMS.
 
-    Gaps shorter than MIN_GAP_SECONDS are merged, so pauses between words
-    and sentences stay inside one segment.
+    The audio is cut into FRAME-sample (50 ms) frames, and a frame counts as
+    speech if its RMS level is above SPEECH_RMS. Gaps shorter than
+    MIN_GAP_SECONDS are merged, so pauses between words and sentences stay
+    inside one segment.
+
+    Args:
+        pcm: 1-D float audio at SAMPLE_RATE.
+
+    Returns:
+        A list of (start, end) sample indices, in order, end exclusive.
     """
     n = len(pcm) // FRAME
     rms = np.sqrt((pcm[:n * FRAME].reshape(n, FRAME) ** 2).mean(axis=1))
@@ -172,9 +232,20 @@ class PersonaPlex:
 
     Mirrors moshi.offline.run_inference, split into a one-time load and a
     per-turn `respond`.
+
+    Attributes:
+        mimi, other_mimi: Mimi audio codecs (encoder/decoder), as in moshi.
+        tokenizer: SentencePiece tokenizer for the text stream.
+        lm_gen: The streaming generator wrapping the 7B language model.
+        frame_size: Samples per model frame (1920, i.e. 80 ms at 24 kHz).
     """
 
     def __init__(self, device: str):
+        """Download (if needed) and load the model, then warm it up.
+
+        Args:
+            device: Torch device, "cpu" or "mps".
+        """
         import sentencepiece
         from huggingface_hub import hf_hub_download
         from moshi.models import LMGen, loaders
@@ -203,7 +274,20 @@ class PersonaPlex:
         warmup(self.mimi, self.other_mimi, self.lm_gen, device, self.frame_size)
 
     def script(self, text: str) -> list:
-        """Text-stream tokens that make the model say `text`, one per frame."""
+        """Text-stream tokens that make the model say `text`, one per frame.
+
+        Follows the rhythm PersonaPlex uses when it speaks on its own:
+        LEAD_FRAMES of PAD, then for each word an EPAD, the word's
+        SentencePiece pieces, and PAD for about FRAMES_PER_CHAR frames per
+        character; extra PADs after punctuation; then TAIL_FRAMES of PAD so
+        the audio can finish.
+
+        Args:
+            text: The words to say.
+
+        Returns:
+            A list of token IDs, one per 80 ms frame, for respond(script=...).
+        """
         tokens = [PAD] * LEAD_FRAMES
         for word in text.split():
             pieces = self.tokenizer.encode(word)
@@ -216,13 +300,30 @@ class PersonaPlex:
         return tokens + [PAD] * TAIL_FRAMES
 
     def respond(self, voice_prompt: Path, role: str, heard: np.ndarray,
-                listen_seconds: float, seed: int, script: list = None) -> tuple:
+                listen_seconds: float, seed: int, script: list | None = None) -> tuple:
         """Play `heard` to the model as the other person, then `listen_seconds`
         of silence, and return what the model said: audio aligned with the
         input, and one text piece per 80 ms model frame ("" for none).
 
         With `script`, the text stream is forced one token per frame (then PAD),
         so the model says the scripted words instead of choosing its own.
+
+        Each call starts fresh: it resets the model's streaming state and
+        replays the voice and role prompts, so turns don't share memory.
+
+        Args:
+            voice_prompt: CPU copy of the voice (.pt), from cpu_voice_prompt().
+            role: The role (text) prompt for this turn.
+            heard: The other speaker's audio, float32 at SAMPLE_RATE. May be
+                empty.
+            listen_seconds: Seconds of silence after `heard`, the speaker's
+                time to talk.
+            seed: Random seed for this turn.
+            script: Optional token IDs from script() to force the words.
+
+        Returns:
+            (pcm, texts): the model's audio, as long as `heard` plus the
+            silence, and its text stream as one string per decoded frame.
         """
         import torch
         from moshi.models.lm import _iterate_audio, encode_from_sphn
@@ -264,8 +365,19 @@ def clip_reply(pcm: np.ndarray, texts: list, frame_size: int, heard_samples: int
     """Cut out what the speaker said after the heard audio ended.
 
     Speech that ends before the heard audio ends (an "mm-hm" over the other
-    person) is dropped. Returns (clip, text, cut_off), or (None, "", False)
-    if the speaker said nothing.
+    person) is dropped. The clip runs from the first kept segment to the
+    last, plus PAD_SECONDS on each side.
+
+    Args:
+        pcm: The speaker's audio from PersonaPlex.respond().
+        texts: The matching text pieces, one per model frame.
+        frame_size: Samples per model frame, to line texts up with pcm.
+        heard_samples: Length of the audio the speaker heard first.
+
+    Returns:
+        (clip, text, cut_off): the audio clip, the text said in it, and
+        whether the speaker was still talking when its time ran out.
+        (None, "", False) if the speaker said nothing.
     """
     segments = [s for s in speech_segments(pcm) if s[1] > heard_samples]
     if not segments:
@@ -277,7 +389,13 @@ def clip_reply(pcm: np.ndarray, texts: list, frame_size: int, heard_samples: int
     return pcm[start:end], text, cut_off
 
 
-def main():
+def main() -> None:
+    """Parse the command line, run every student and guide turn, and write the outputs.
+
+    For each question: the student says it (forced text), then the guide
+    answers, retried with new seeds up to ATTEMPTS times if it stays silent.
+    A question the student produces no audio for is skipped.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("prompts", nargs="?", default=HERE / "prompts.txt", type=Path,
                         help="Prompts file (default: example2/prompts.txt)")

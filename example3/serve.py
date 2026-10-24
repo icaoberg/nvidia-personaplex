@@ -38,11 +38,24 @@ PERSONAS = {
 
 
 def sysctl(name: str) -> str:
+    """Read a macOS system setting with `sysctl -n`.
+
+    Args:
+        name: The sysctl key, e.g. "machdep.cpu.brand_string" or "hw.memsize".
+
+    Returns:
+        The value as a string, or "" if the key doesn't exist.
+    """
     return subprocess.run(["sysctl", "-n", name], capture_output=True, text=True).stdout.strip()
 
 
-def check_mac():
-    """Require macOS on Apple Silicon and the MLX port; warn if memory is low."""
+def check_mac() -> None:
+    """Require macOS on Apple Silicon and the MLX port; warn if memory is low.
+
+    Prints the chip, memory, and macOS version. Exits if this isn't macOS on
+    arm64, or if `personaplex_mlx` can't be imported (with the setup steps);
+    only warns (on stderr) for less than MIN_MEMORY_GB of memory.
+    """
     if sys.platform != "darwin" or platform.machine() != "arm64":
         sys.exit("This example needs a Mac with Apple Silicon (MLX doesn't run elsewhere).")
     if importlib.util.find_spec("personaplex_mlx") is None:
@@ -58,8 +71,13 @@ def check_mac():
               "this needs; expect swapping and choppy audio.", file=sys.stderr)
 
 
-def check_model_access():
-    """Fail early, with instructions, if the gated model can't be downloaded."""
+def check_model_access() -> None:
+    """Fail early, with instructions, if the gated model can't be downloaded.
+
+    Downloads the model's small config.json. If Hugging Face denies access
+    (no login, or the license isn't accepted), exits with the steps to fix
+    it before the MLX server starts loading the model.
+    """
     from huggingface_hub import hf_hub_download
     from huggingface_hub.utils import GatedRepoError
 
@@ -76,7 +94,20 @@ def check_model_access():
 
 
 def load_persona(name: str) -> tuple:
-    """Return (text, voice ID, voice menu label), and print and copy the text."""
+    """Return (text, voice ID, voice menu label), and print and copy the text.
+
+    The text is printed so it can be pasted into the page's Text Prompt box,
+    and copied to the clipboard with `pbcopy` when available. Warns if it's
+    longer than the page's MAX_PROMPT_CHARS limit.
+
+    Args:
+        name: A key of PERSONAS, e.g. "sennet".
+
+    Returns:
+        (text, voice, label): the persona text from personas/, the voice ID
+        for the MLX server (e.g. "NATF2"), and the matching label in the
+        page's voice menu (e.g. "NATURAL_F2").
+    """
     filename, voice, label = PERSONAS[name]
     text = (HERE / "personas" / filename).read_text().strip()
     if len(text) > MAX_PROMPT_CHARS:
@@ -90,7 +121,13 @@ def load_persona(name: str) -> tuple:
     return text, voice, label
 
 
-def main():
+def main() -> None:
+    """Parse the command line, run the checks, and start the MLX web server.
+
+    Runs `python -m personaplex_mlx.local_web` in the foreground with the
+    persona as its default text prompt (the page's own Text Prompt box takes
+    precedence), until Ctrl+C.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--persona", default="sennet", choices=list(PERSONAS),
                         help="Persona to print and copy for the page (default: sennet)")

@@ -8,14 +8,27 @@ This script lets you write your side of the conversation as text instead:
   2. Speak each of your lines with macOS `say`, leaving a pause after each
      one for the agent to answer, and save the result as input.wav.
   3. Run `python -m moshi.offline` on input.wav, on the Mac's CPU.
-  4. Save the agent's audio, its transcript, and a stereo mix of both sides.
+  4. Save the agent's audio and transcript, plus two mixes of both sides:
+     conversation.wav (one voice at a time, `--gap` seconds apart) and
+     conversation_live.wav (stereo, with the real, overlapping timing).
+
+Outputs (in example1/output/ by default):
+
+  input.wav              your lines as speech, with the pauses
+  agent.wav              the agent's reply audio, as long as input.wav
+  agent.json             the agent's raw text tokens from moshi.offline
+  transcript.txt         what the agent said, as text
+  conversation.wav       mono, one voice at a time
+  conversation_live.wav  stereo, you on the left, the agent on the right
+  voices/                CPU copy of the voice prompt (see cpu_voice_prompt_dir)
 
 Run it inside the `personaplex` conda environment (see ../environment.yml),
-with HF_TOKEN set and the model license accepted on Hugging Face:
+logged in to Hugging Face with the model license accepted:
 
   python example1/run_example.py
-  python example1/run_example.py --device mps       # Apple GPU (untested upstream)
   python example1/run_example.py --input-only       # only build input.wav
+  python example1/run_example.py --mix-only --gap 1 # remix an existing run
+  python example1/run_example.py --device mps       # Apple GPU (slow; see README)
 """
 
 import argparse
@@ -44,11 +57,24 @@ HERE = Path(__file__).resolve().parent
 
 
 def sysctl(name: str) -> str:
+    """Read a macOS system setting with `sysctl -n`.
+
+    Args:
+        name: The sysctl key, e.g. "machdep.cpu.brand_string" or "hw.memsize".
+
+    Returns:
+        The value as a string, or "" if the key doesn't exist.
+    """
     return subprocess.run(["sysctl", "-n", name], capture_output=True, text=True).stdout.strip()
 
 
-def check_mac():
-    """Require macOS on Apple Silicon; warn if this isn't an M4 or memory is low."""
+def check_mac() -> None:
+    """Require macOS on Apple Silicon; warn if this isn't an M4 or memory is low.
+
+    Prints the chip, memory, and macOS version. Exits if this isn't macOS on
+    arm64 or if the `say` command is missing; only warns (on stderr) for a
+    non-M4 chip or less than MIN_MEMORY_GB of memory.
+    """
     if sys.platform != "darwin" or platform.machine() != "arm64":
         sys.exit("This example targets a MacBook Pro M4 (macOS on Apple Silicon). "
                  "On Linux with an NVIDIA GPU, run `python -m moshi.offline` directly; "
@@ -67,8 +93,13 @@ def check_mac():
               file=sys.stderr)
 
 
-def check_model_access():
-    """Fail early, with instructions, if the gated model can't be downloaded."""
+def check_model_access() -> None:
+    """Fail early, with instructions, if the gated model can't be downloaded.
+
+    Downloads the model's small config.json. If Hugging Face denies access
+    (no login, or the license isn't accepted), exits with the steps to fix
+    it instead of letting moshi.offline fail later with a long traceback.
+    """
     from huggingface_hub import hf_hub_download
     from huggingface_hub.utils import GatedRepoError
 
@@ -92,6 +123,16 @@ def cpu_voice_prompt_dir(voice: str, out_dir: Path) -> Path:
     with torch.load(path) and no map_location, which fails on a Mac with
     "Attempting to deserialize object on a CUDA device". A copy saved from the
     CPU loads anywhere, without patching the upstream submodule.
+
+    Args:
+        voice: Voice name without ".pt", e.g. "NATF2".
+        out_dir: Output folder; the copy goes in out_dir/voices/.
+
+    Returns:
+        The folder holding the copy, to pass to moshi.offline as
+        --voice-prompt-dir.
+
+    Exits if `voice` isn't one of the published voices.
     """
     import tarfile
 
@@ -117,7 +158,22 @@ def cpu_voice_prompt_dir(voice: str, out_dir: Path) -> Path:
 
 
 def parse_prompts(path: Path) -> dict:
-    """Parse the key: value prompts file into voice, role, and turns."""
+    """Parse the key: value prompts file into voice, role, and turns.
+
+    See prompts.txt for the format. A `pause:` line applies to the turns
+    after it, and `audio:` paths are resolved relative to the prompts file.
+
+    Args:
+        path: The prompts file.
+
+    Returns:
+        {"voice": str, "role": str, "turns": list}, where each turn is
+        {"kind": "text" | "audio", "value": str, "pause": float}: the line
+        to speak (or the WAV path) and the seconds of silence after it.
+
+    Exits, naming the line, on a malformed line, an unknown key, a missing
+    audio file, or a file with no turns.
+    """
     voice = "NATF2"
     role_lines = []
     pause = 6.0
@@ -154,7 +210,17 @@ def parse_prompts(path: Path) -> dict:
 
 
 def synthesize(text: str, say_voice: str, workdir: Path, index: int) -> Path:
-    """Speak `text` into a 24 kHz WAV file with macOS `say`."""
+    """Speak `text` into a 24 kHz WAV file with macOS `say`.
+
+    Args:
+        text: What to say.
+        say_voice: macOS voice name (see `say -v '?'`), or "" for the default.
+        workdir: Folder for the WAV file.
+        index: Turn number, used in the file name (turnNN.wav).
+
+    Returns:
+        Path to the 16-bit, 24 kHz mono WAV file.
+    """
     wav = workdir / f"turn{index:02d}.wav"
     cmd = ["say", "-o", str(wav), "--file-format=WAVE", f"--data-format=LEI16@{SAMPLE_RATE}"]
     if say_voice:
@@ -164,20 +230,39 @@ def synthesize(text: str, say_voice: str, workdir: Path, index: int) -> Path:
 
 
 def load_mono(path: str) -> np.ndarray:
-    """Load any WAV as mono float32 at SAMPLE_RATE."""
+    """Load any WAV as mono float32 at SAMPLE_RATE.
+
+    Args:
+        path: The WAV file. Any sample rate and channel count; channels are
+            averaged and the audio is resampled.
+
+    Returns:
+        1-D float32 samples at SAMPLE_RATE.
+    """
     pcm, sr = sphn.read(path)  # (channels, samples)
     pcm = sphn.resample(pcm, src_sample_rate=sr, dst_sample_rate=SAMPLE_RATE)
     return pcm.mean(axis=0).astype(np.float32)
 
 
 def silence(seconds: float) -> np.ndarray:
+    """Return `seconds` of silence as float32 samples at SAMPLE_RATE."""
     return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
 
 
 def build_input(turns: list, say_voice: str) -> tuple:
     """Concatenate the user's turns, each followed by its pause.
 
-    Returns the audio and the (start, end) sample span of each turn.
+    The audio starts with LEAD_IN_SECONDS of silence. Text turns are spoken
+    with `say` (in a temporary folder); audio turns are loaded from their WAV.
+
+    Args:
+        turns: Turns from parse_prompts().
+        say_voice: macOS voice for text turns, or "" for the default.
+
+    Returns:
+        (audio, spans): the float32 audio at SAMPLE_RATE, and one
+        (start, end) sample span per turn, covering just that turn's speech
+        clip (not its pause). write_turn_mix() uses the spans to find each turn.
     """
     pieces = [silence(LEAD_IN_SECONDS)]
     spans = []
@@ -200,8 +285,16 @@ def build_input(turns: list, say_voice: str) -> tuple:
 def speech_segments(pcm: np.ndarray) -> list:
     """(start, end) sample spans where `pcm` is louder than SPEECH_RMS.
 
-    Gaps shorter than MIN_GAP_SECONDS are merged, so pauses between words
-    and sentences stay inside one segment.
+    The audio is cut into FRAME-sample (50 ms) frames, and a frame counts as
+    speech if its RMS level is above SPEECH_RMS. Gaps shorter than
+    MIN_GAP_SECONDS are merged, so pauses between words and sentences stay
+    inside one segment.
+
+    Args:
+        pcm: 1-D float audio at SAMPLE_RATE.
+
+    Returns:
+        A list of (start, end) sample indices, in order, end exclusive.
     """
     n = len(pcm) // FRAME
     rms = np.sqrt((pcm[:n * FRAME].reshape(n, FRAME) ** 2).mean(axis=1))
@@ -215,8 +308,25 @@ def speech_segments(pcm: np.ndarray) -> list:
     return [tuple(s) for s in segments]
 
 
-def run_personaplex(args, prompts: dict, input_wav: Path, agent_wav: Path, agent_json: Path):
-    """Run PersonaPlex's offline inference on the input WAV."""
+def run_personaplex(args: argparse.Namespace, prompts: dict, input_wav: Path,
+                    agent_wav: Path, agent_json: Path) -> None:
+    """Run PersonaPlex's offline inference on the input WAV.
+
+    Runs `python -m moshi.offline` in a subprocess, with the CPU voice copy
+    from cpu_voice_prompt_dir() and the role prompt (if any). With
+    --device mps, sets PYTORCH_ENABLE_MPS_FALLBACK=1 so operations MPS
+    doesn't implement run on the CPU instead of failing.
+
+    Args:
+        args: Parsed command-line arguments (uses out_dir, device, seed).
+        prompts: Output of parse_prompts() (uses voice and role).
+        input_wav: The user audio to play to the model.
+        agent_wav: Where moshi.offline writes the agent's audio.
+        agent_json: Where moshi.offline writes the agent's text tokens.
+
+    Exits with a one-line message if moshi.offline fails; its own error is
+    printed above.
+    """
     cmd = [
         sys.executable, "-m", "moshi.offline",
         "--voice-prompt", f"{prompts['voice']}.pt",
@@ -241,16 +351,32 @@ def run_personaplex(args, prompts: dict, input_wav: Path, agent_wav: Path, agent
 
 
 def write_transcript(agent_json: Path, transcript: Path) -> str:
-    """Join the agent's text tokens into readable text."""
+    """Join the agent's text tokens into readable text.
+
+    Args:
+        agent_json: moshi.offline's text output: a JSON list with one token
+            per model frame (word pieces, or EPAD/BOS/EOS/PAD).
+        transcript: Where to write the joined text.
+
+    Returns:
+        The text, without the special tokens.
+    """
     tokens = json.loads(agent_json.read_text())
     text = "".join(t for t in tokens if t not in SPECIAL_TOKENS).strip()
     transcript.write_text(text + "\n")
     return text
 
 
-def write_live_mix(user: np.ndarray, agent: np.ndarray, out: Path):
+def write_live_mix(user: np.ndarray, agent: np.ndarray, out: Path) -> None:
     """Stereo, time-aligned: user on the left, agent on the right, as the
-    model heard and answered them (the voices can overlap)."""
+    model heard and answered them (the voices can overlap).
+
+    Args:
+        user: The user audio (input.wav), float32 at SAMPLE_RATE.
+        agent: The agent audio (agent.wav), float32 at SAMPLE_RATE.
+        out: Where to write the stereo WAV. The shorter side is padded with
+            silence.
+    """
     length = max(len(user), len(agent))
     stereo = np.zeros((2, length), dtype=np.float32)
     stereo[0, :len(user)] = user
@@ -269,7 +395,18 @@ def write_turn_mix(user: np.ndarray, spans: list, agent: np.ndarray, out: Path,
     it opens the conversation; during or after a turn, it is that turn's
     answer and is kept whole, unless it also ends before the user stops
     talking (a backchannel), in which case it is dropped.
-    Returns the number of dropped segments.
+
+    Args:
+        user: The user audio (input.wav), float32 at SAMPLE_RATE.
+        spans: Each turn's (start, end) samples in `user`, from build_input().
+            Leading and trailing silence inside a span is trimmed.
+        agent: The agent audio (agent.wav), aligned with `user`.
+        out: Where to write the mono WAV.
+        gap: Seconds of silence between voices. Each clip keeps PAD_SECONDS
+            of near-silence at both ends, which counts toward the gap.
+
+    Returns:
+        The number of agent segments dropped as backchannels.
     """
     pad = int(PAD_SECONDS * SAMPLE_RATE)
 
@@ -289,7 +426,9 @@ def write_turn_mix(user: np.ndarray, spans: list, agent: np.ndarray, out: Path,
         else:
             answers[i].append((start, end))
 
-    def clip(pcm, segments):
+    def clip(pcm: np.ndarray, segments: list) -> np.ndarray:
+        """Cut `pcm` from the first segment's start to the last one's end,
+        plus `pad` samples on each side."""
         return pcm[max(segments[0][0] - pad, 0):segments[-1][1] + pad]
 
     # Each clip carries `pad` of near-silence on both ends; count it in the gap.
@@ -305,7 +444,13 @@ def write_turn_mix(user: np.ndarray, spans: list, agent: np.ndarray, out: Path,
     return dropped
 
 
-def main():
+def main() -> None:
+    """Parse the command line, build input.wav, run the model, and write the outputs.
+
+    --input-only stops after input.wav. --mix-only skips the model and
+    remakes transcript.txt and both conversation mixes from the existing
+    agent.wav and agent.json.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("prompts", nargs="?", default=HERE / "prompts.txt", type=Path,
                         help="Prompts file (default: example1/prompts.txt)")
