@@ -29,10 +29,11 @@ role: Keep answers short and practical.
 
 pause: 5
 
-user: Hi, I'm a graduate student and I'm new to HuBMAP. What is HuBMAP, and what kind of data is on the portal?
-user: I want to do a computational biology analysis using public data. How do I find datasets for a specific organ, like the kidney?
+user: Hi, I'm a graduate student in biology and I'm new to HuBMAP. What is HuBMAP, and what kind of data is on the portal?
+user: I am looking for datasets that I can use for computational workflows for my projects. What assay types are available in HuBMAP?
+user: I am curious, any spatial transcriptomics data available for download?
+user: Beyond the portal, are there are any tools developed by HuBMAP for data exploration?
 user: Which assay types should I look for if I want single-cell RNA sequencing data?
-user: Do I need an account to download the data?
-user: Is all of the data public, or is some of it restricted?
-user: What if I want to download a lot of datasets at once, or get them from a script?
+user: Are the datasets public? Do I need an account to download the data?
+user: What if I want to download a lot of datasets at once? Is this doable?
 user: Thank you, that's really helpful. What would be a good first project for me?
