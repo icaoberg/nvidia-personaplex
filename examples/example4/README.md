@@ -16,7 +16,7 @@ The example builds the approach that fits PersonaPlex best: **retrieve before th
         │
         ▼
 knowledge/slurm.txt + lmod.txt + bridges2.txt ──BM25──► best fact cards ──► Ivan's persona (≤ 1,500 chars)
-             (84 fact cards)                                                        │
+             (95 fact cards)                                                        │
                                                                                     ▼
                                               browser (mic) ◄──► personaplex_mlx.local_web (MLX, 4-bit)
 ```
@@ -56,12 +56,12 @@ In a chat LLM, RAG means: for each question, search a knowledge base and put the
      - the compiler/MPI software hierarchy, the one-version and family rules
      - `module show`, `help`, `whatis` and `keyword`; the `ml` shortcut
      - saving and restoring collections, personal modulefiles with `module use`, the `avail` legend, and startup files
-   - [`bridges2.txt`](knowledge/bridges2.txt): 29 cards from PSC's Bridges-2 User Guide (read October 2026). These are site-specific, about one cluster. They cover:
+   - [`bridges2.txt`](knowledge/bridges2.txt): 40 cards from PSC's Bridges-2 User Guide (read October 2026). These are site-specific, about one cluster. They cover:
      - the hardware; logging in with SSH or OnDemand; login nodes versus compute nodes
      - file spaces (`$HOME`, `$PROJECT` on Ocean, `$LOCAL`, `$RAMDISK`), quotas, and file retention
      - file transfers through the data transfer node or Globus
      - allocations, `projects`, service-unit charging, and `-A` / `change_primary_group`
-     - each partition (RM, RM-shared, RM-512, EM, GPU, GPU-shared) with its limits, GPU types and how to request them
+     - the partitions in detail: each one (RM, RM-shared, RM-512, EM, GPU, GPU-shared) with its limits, which to choose, their names, default and maximum times, how many nodes of each kind there are, example commands with their SU cost, and the GPU node types, including the DGX-2
      - `interact`, PSC's `slurm-tool`, Bridges-2 modules, community datasets, getting help, and acknowledgments
 
    Each card is one or two spoken-style sentences, because the model follows its prompt as instructions and says things aloud. So commands are spelled the way an engineer would say them: "dash dash gres equals gpu colon two".
@@ -73,24 +73,28 @@ Examples of what gets retrieved:
 
 | Topic | Cards retrieved | Persona length |
 |---|---|---|
-| `submitting a GPU batch job` | sbatch, working-directory, b2-gpu-types, b2-login-nodes | 1,426 |
+| `submitting a GPU batch job` | sbatch, b2-login-nodes, b2-partition-chooser, gpus | 1,417 |
 | `why is my job pending` | squeue, pending-reasons | 1,102 |
 | `job arrays and dependencies` | job-arrays, dependencies, scancel, array-limits | 1,482 |
-| `my job ran out of memory` | memory, output-files, b2-partition-rm512, working-directory, sstat | 1,438 |
+| `my job ran out of memory` | memory, output-files, working-directory, sstat, b2-partition-rm512 | 1,422 |
 | `interactive session on a compute node` | salloc, srun-pty, b2-interact, b2-login-nodes | 1,432 |
 | `loading a compiler module` | hierarchy, b2-modules, spider-prerequisites, families | 1,455 |
-| `module not found` | module-spider, module-use, module-list | 1,131 |
+| `module not found` | module-spider, module-use, module-list, module-unload, lmod-overview | 1,397 |
 | `saving my modules so they load every time` | startup-files, collections-restore, collections-save, module-load, module-reset | 1,479 |
-| `loading Python and submitting a batch job` | sbatch, working-directory, b2-login-nodes, module-avail (all three files) | 1,251 |
-| `submitting a GPU job on Bridges-2` | b2-partition-gpu, b2-gpu-types, b2-partition-gpu-shared, b2-benchmark | 1,428 |
+| `loading Python and submitting a batch job` | sbatch, b2-login-nodes, module-avail (all three files) | 1,087 |
+| `submitting a GPU job on Bridges-2` | b2-partition-chooser, b2-partition-gpu, sbatch, b2-gpu-shared-example | 1,481 |
 | `an interactive session on Bridges-2` | b2-interact, salloc, srun-pty, b2-interact-gpu | 1,483 |
 | `transferring files to Bridges-2` | b2-transfer, b2-globus, b2-retention, b2-project | 1,266 |
 | `where should I store large files on Bridges-2` | b2-project, b2-globus | 999 |
 | `how many SUs do I have left` | b2-projects-command | 721 |
-| `which partition for a small serial job` | b2-partition-rm-shared, job-steps | 1,002 |
+| `which partition should I use on Bridges-2` | b2-partition-chooser, b2-partition-names, b2-partition-rm, b2-partition-time-limits, b2-benchmark | 1,476 |
+| `what is the maximum time limit on Bridges-2` | b2-partition-time-limits, time-limit, b2-partition-rm, b2-partition-rm-shared | 1,375 |
+| `running a job that needs a lot of memory on Bridges-2` | b2-partition-em, memory, b2-partition-rm512, b2-partition-rm, sstat | 1,448 |
+| `how much does a GPU job cost` | b2-gpu-partition-example, b2-gpu-shared-example, b2-su-charging | 1,369 |
+| `using the DGX-2` | b2-gpu-nodes | 876 |
 | `kubernetes` | none: the knowledge base is about Slurm, Lmod and Bridges-2, so it uses the base persona | 588 |
 
-Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are searched by default, general topics pick up Bridges-2 specifics too: "submitting a GPU batch job" now gets PSC's GPU types instead of the general Slurm GPU card. That's what a Bridges-2 student wants. For any other cluster, search only the general files: `--knowledge examples/example4/knowledge/slurm.txt examples/example4/knowledge/lmod.txt`.
+Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are searched by default, general topics pick up Bridges-2 specifics too: "submitting a GPU batch job" gets Slurm's general GPU card *and* the Bridges-2 partition chooser. That's what a Bridges-2 student wants. For any other cluster, search only the general files: `--knowledge examples/example4/knowledge/slurm.txt examples/example4/knowledge/lmod.txt`.
 
 ## The pieces
 
@@ -98,7 +102,7 @@ Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are
 
 ```
 --topic "submitting a GPU batch job"
-   → tokenize → BM25 ranking over 84 fact cards (all knowledge/*.txt) → best cards
+   → tokenize → BM25 ranking over 95 fact cards (all knowledge/*.txt) → best cards
    → base persona + cards (≤ 1,500 chars) → printed and copied
    → personaplex_mlx.local_web → browser at localhost:8998 (mic in, voice out)
 ```
@@ -110,7 +114,7 @@ Cards whose ids start with `b2-` come from `bridges2.txt`. Because all files are
 | [`README.md`](README.md) | This explanation: why plain RAG doesn't fit, the alternatives, how to run and extend the example, and the live test |
 | [`knowledge/slurm.txt`](knowledge/slurm.txt) | 32 Slurm fact cards, one per paragraph |
 | [`knowledge/lmod.txt`](knowledge/lmod.txt) | 23 Lmod fact cards, one per paragraph |
-| [`knowledge/bridges2.txt`](knowledge/bridges2.txt) | 29 Bridges-2 fact cards, one per paragraph, specific to PSC's cluster |
+| [`knowledge/bridges2.txt`](knowledge/bridges2.txt) | 40 Bridges-2 fact cards, one per paragraph, specific to PSC's cluster |
 | [`serve.py`](serve.py) | The program: retrieves cards, builds the persona, and starts the live server |
 
 ### The knowledge files: `knowledge/*.txt`

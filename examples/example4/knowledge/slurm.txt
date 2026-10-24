@@ -46,8 +46,8 @@ Choose a partition with dash p and the account to charge with dash A. Partition 
 [output-files] output, error, log, slurm out, stdout, stderr, file name
 By default, a batch job's output goes to a file called slurm dash job ID dot out, in the directory you submitted from. Change it with dash o for output and dash e for errors; percent j becomes the job ID and percent x the job name.
 
-[working-directory] directory, working directory, chdir, submit directory, path
-A batch job starts in the directory you ran sbatch from, unless you set another one with dash dash chdir. The variable SLURM_SUBMIT_DIR holds the submit directory.
+[working-directory] directory, working directory, chdir, submission directory, path
+A job starts in the directory where you ran sbatch, unless you set another one with dash dash chdir; the variable SLURM_SUBMIT_DIR holds that path.
 
 [environment-variables] environment variable, slurm_job_id, nodelist, ntasks, variables
 Inside a job, Slurm sets variables you can use in your script: SLURM_JOB_ID is the job ID, SLURM_JOB_NODELIST lists the nodes, SLURM_NTASKS is the number of tasks, and SLURM_CPUS_PER_TASK is set when you asked for cpus per task.

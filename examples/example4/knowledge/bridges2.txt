@@ -76,6 +76,39 @@ The GPU partition on Bridges-2 gives you whole GPU nodes, so ask for GPUs in mul
 [b2-partition-gpu-shared] bridges2, gpu-shared, one gpu, few gpus, shared gpu, partial gpu node
 The GPU-shared partition on Bridges-2 gives you part of one GPU node, up to four GPUs, and you're charged only for the GPUs you use. The default is one GPU for one hour, and the maximum time is 48 hours.
 
+[b2-partition-chooser] bridges2, partition, which partition, choose, pick, queue, where to submit
+To pick a Bridges-2 partition: use RM-shared for a few cores, RM for whole nodes or MPI across nodes, RM-512 if you need up to 512 gigabytes on a node, EM for even more memory, GPU-shared for one to four GPUs, and GPU for eight or more GPUs.
+
+[b2-partition-names] bridges2, partition, partitions, list partitions, names, sinfo, slurm-tool
+The Bridges-2 partitions are RM, RM-shared, RM-512, EM, GPU, and GPU-shared, typed exactly like that with dash p. Run sinfo or slurm dash tool p to see them and how busy they are.
+
+[b2-partition-time-limits] bridges2, time limit, walltime, maximum time, default time, partition, hours
+Every Bridges-2 partition defaults to one hour, so always set dash t. The maximum is 72 hours for RM, RM-shared, and RM-512, 120 hours for EM, and 48 hours for GPU and GPU-shared.
+
+[b2-partition-sizes] bridges2, nodes, how many nodes, partition, sizes, hardware, cores
+Bridges-2 has 488 regular memory nodes with 256 gigabytes and 16 with 512 gigabytes, all with 128 cores, plus 4 extreme memory nodes with 96 cores and 4 terabytes each.
+
+[b2-rm-example] bridges2, rm, example, sbatch, full node, 128 cores, cost
+A whole-node RM job on Bridges-2 looks like sbatch dash p RM dash N one dash dash ntasks per node equals 128 dash t five colon zero zero colon zero zero. One RM job can use up to 64 nodes, or 6400 cores, and a full node for five hours costs 640 SUs.
+
+[b2-rm-shared-example] bridges2, rm-shared, example, sbatch, memory, cores, cost
+An RM-shared job on Bridges-2 asks for cores with dash dash ntasks per node, for example 64 cores for five hours, which costs 320 SUs. Memory comes with the cores, 2 gigabytes each, so ask for more cores if you need more memory.
+
+[b2-rm512-details] bridges2, rm-512, 512, cores, nodes, limits
+RM-512 jobs on Bridges-2 start at one full node of 128 cores and can use up to two nodes, or 256 cores. There are only 16 of these nodes, so use RM-512 only when you need more than 256 gigabytes of memory on a node.
+
+[b2-em-example] bridges2, em, example, sbatch, extreme memory, cost, ondemand
+An EM job on Bridges-2 asks for cores in multiples of 24 with dash n, for example dash p EM dash n 96 for a whole node, which costs 480 SUs for five hours. EM jobs must be batch jobs: not interactive, and not from OnDemand.
+
+[b2-gpu-nodes] bridges2, gpu nodes, h100, l40s, v100, dgx, dgx-2, how many gpus, gpu memory
+Bridges-2 GPU nodes have eight GPUs each: 10 nodes with H100s with 80 gigabytes, 3 nodes with L40S with 48 gigabytes, and V100 nodes with 32 or 16 gigabytes. There is also one DGX-2 with sixteen V100 32-gigabyte GPUs, requested with dash dash gpus equals v100 dash 32 colon sixteen.
+
+[b2-gpu-partition-example] bridges2, gpu, gpu partition, example, sbatch, multiple nodes, cost
+In the GPU partition on Bridges-2, ask for GPUs in multiples of eight, for example sbatch dash p GPU dash N two dash dash gpus equals v100 dash 16 colon sixteen for two full nodes. A full V100 node for five hours costs 40 SUs, and H100 GPUs cost twice as much.
+
+[b2-gpu-shared-example] bridges2, gpu-shared, example, sbatch, one gpu, two gpus, cost
+For a small GPU job on Bridges-2, use GPU-shared, for example sbatch dash p GPU dash shared dash dash gpus equals l40s dash 48 colon two dash t two colon zero zero colon zero zero for two L40S GPUs for two hours. You can ask for at most four GPUs this way.
+
 [b2-gpu-types] bridges2, gpu, gpu type, h100, l40s, v100, gpus, gres, which gpu
 Bridges-2 GPU types are h100 dash 80, l40s dash 48, v100 dash 32, and v100 dash 16. In a batch job, ask with dash dash gpus equals type colon count, for example dash p GPU dash shared with dash dash gpus equals l40s dash 48 colon one; in an interactive session, use dash dash gres equals gpu colon type colon count.
 
