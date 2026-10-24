@@ -1,0 +1,26 @@
+# PersonaPlex example 1: write a conversation as text, get the agent's audio.
+#
+# Format (one setting per line, "key: value"; lines starting with # are ignored):
+#
+#   voice: <name>    Agent voice: NATF0-3, NATM0-3, VARF0-4, VARM0-4.
+#   role:  <text>    Role prompt for the agent. Repeat "role:" lines to
+#                    write a long prompt; they are joined with spaces.
+#   pause: <secs>    Silence after each following user turn, so the agent
+#                    has time to answer. Can be changed between turns.
+#   user:  <text>    Something you say. Spoken with text-to-speech.
+#   audio: <file>    Something you say, from a recorded WAV file instead
+#                    (path relative to this file).
+
+voice: NATM1
+
+role: You work for SwiftPlex Appliances, an appliance repair company, and your name is Farhod Toshmatov.
+role: Information: the dishwasher model is out of stock for replacement parts; we can use an alternative part with a 3-day delay.
+role: Labor cost remains $60 per hour.
+
+pause: 7
+
+user: Hi, my dishwasher stopped draining and I think a part is broken. Can you help?
+user: How long would it take to get the replacement part?
+user: And how much will the repair cost?
+pause: 5
+user: Okay, thank you. Let's go ahead and book it.

@@ -1,0 +1,33 @@
+# Conda environment for NVIDIA PersonaPlex.
+#
+# Create and activate (run from the root of this repository, with the
+# submodule checked out):
+#
+#   git submodule update --init --recursive
+#   conda env create -f environment.yml
+#   conda activate personaplex
+#
+# Python 3.12 matches the upstream Dockerfile. Package pins come from
+# personaplex/moshi/pyproject.toml.
+#
+# Blackwell GPUs: upstream recommends the CUDA 13.0 PyTorch build, which is
+# newer than the torch < 2.5 pin below. After creating the environment, run:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+name: personaplex
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  # Opus audio codec (system library; replaces apt/dnf/brew install)
+  - libopus
+  - pip:
+      # PersonaPlex's fork of moshi (editable, from the submodule). Pulls in
+      # numpy, safetensors, huggingface-hub, einops, sentencepiece,
+      # sounddevice, sphn, torch and aiohttp at the pinned versions.
+      - -e ./personaplex/moshi
+      # Not declared upstream but imported by the code:
+      - tqdm             # progress bars (moshi/models/lm.py)
+      - pyloudnorm       # loudness normalization (moshi/models/lm.py)
+      - accelerate       # --cpu-offload (moshi/models/loaders.py)
+      - gradio<5         # --gradio-tunnel (moshi/server.py); <5 keeps huggingface-hub < 0.25
