@@ -48,12 +48,75 @@ Examples of what gets retrieved:
 | `buttermilk pancakes but I have no buttermilk` | buttermilk, pancakes, baking-powder | 915 |
 | `sushi` | none: the knowledge base has no sushi cards, so it uses the base persona | 395 |
 
-## Files
+## The pieces
 
-| File | Purpose |
+### The flow
+
+```
+--topic "pasta with tomato sauce"
+   → tokenize → BM25 ranking over 25 fact cards → best cards
+   → base persona + cards (≤ 1,500 chars) → printed and copied
+   → personaplex_mlx.local_web → browser at localhost:8998 (mic in, voice out)
+```
+
+### Files in this folder
+
+| File | What it is |
 |---|---|
-| [`serve.py`](serve.py) | Retrieves cards for `--topic`, builds the persona, and starts the MLX web server |
-| [`knowledge/cooking.txt`](knowledge/cooking.txt) | The 25 cooking fact cards; the format is described at the top of the file |
+| [`README.md`](README.md) | This explanation: why plain RAG doesn't fit, the alternatives, how to run and extend the example, and the live test |
+| [`knowledge/cooking.txt`](knowledge/cooking.txt) | The knowledge base: 25 fact cards, one per paragraph |
+| [`serve.py`](serve.py) | The program: retrieves cards, builds the persona, and starts the live server |
+
+### The knowledge base: `knowledge/cooking.txt`
+
+Each card is one paragraph:
+
+```
+[pasta-water] pasta, spaghetti, noodles, penne, boil, water, salt
+Cook pasta in a big pot of water at a rolling boil, salted with about one tablespoon...
+```
+
+- **First line:** `[id]` followed by keywords. The keywords are what retrieval matches against most strongly.
+- **Body:** exactly what Chef Marco is told when the card is retrieved. It's written as one or two spoken-style sentences, because the model follows its prompt as instructions rather than quoting it.
+- **Food-safety cards** (chicken, meat temperatures, leftovers) use the USDA safe minimum internal temperatures; the source is cited at the top of the file.
+- **Formatting:** blank lines separate cards, and lines starting with `#` are comments.
+
+### The program: `serve.py`
+
+In the order they're used:
+
+| Piece | What it does |
+|---|---|
+| Settings | `MODEL_REPO` (NVIDIA's gated model), the voice (`NATM0`, labeled "NATURAL_M0" in the page's menu), `MIN_MEMORY_GB`, and the BM25 tuning numbers `BM25_K1`, `BM25_B`, and `KEYWORD_WEIGHT` |
+| `STOPWORDS` | Filler words ignored in matching ("I", "want", "with", "but", …). Without them, "but I have no buttermilk" also matched the seasoning card, whose text contains "but". |
+| `BASE_PERSONA` | Chef Marco without facts: patient, asks what you have, teaches one step at a time, checks in, admits uncertainty. Your topic is filled in, and it ends with "Use these facts:". |
+| `tokenize()` | Turns text into lowercase words, dropping stopwords and simple plurals: "Boiled Eggs" → `boiled`, `egg` |
+| `load_cards()` | Reads the knowledge file into a list of cards (id, keywords, text), and stops with an error naming any malformed card |
+| `bm25_rank()` | Scores every card against your topic with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25). See [How the BM25 score works](#how-the-bm25-score-works). Returns the cards that match at all, best first. |
+| `build_persona()` | Adds the best cards to the base persona, in rank order, until the next card would exceed `--budget` (1,500 characters by default). A card that doesn't fit is skipped and smaller ones are still tried. Cards that matched nothing are never added, so "sushi" gets the base persona alone. |
+| `main()` | Reads the options, retrieves the cards, prints their scores and the finished persona, and copies it with `pbcopy`. With `--dry-run` it stops there. Otherwise it runs the checks below and starts the MLX web server with the persona. |
+| `check_mac()`, `sysctl()` | The same checks as example3: a Mac with Apple Silicon, the MLX port installed in this Python, and enough memory (warns below 16 GB) |
+| `check_model_access()` | Downloads the model's small `config.json` to confirm your Hugging Face login works, and prints the login steps if access is denied |
+
+### How the BM25 score works
+
+For each word in your topic that appears in a card (its text, plus its keyword line counted `KEYWORD_WEIGHT` = 2 times), BM25 adds:
+
+- **More for rare words.** "Buttermilk" appears in one card, so it points strongly to that card; "salt" appears in several, so it counts less (the IDF term).
+- **More for repeated words, with diminishing returns.** A second mention helps, a tenth barely does (`BM25_K1` = 1.5 controls how fast this levels off).
+- **Less for long cards.** A long card doesn't win just by containing more words (`BM25_B` = 0.75 controls how much length is penalized).
+
+These are BM25's standard parameter values. It's pure Python, with no extra packages.
+
+### Pieces outside this folder
+
+| Piece | Role |
+|---|---|
+| [`../../personaplex-mlx/`](../../personaplex-mlx) | The community MLX port that runs the model on the Mac's GPU with 4-bit weights. `serve.py` starts its web server, `personaplex_mlx.local_web`. |
+| [`../../environment-mlx.yml`](../../environment-mlx.yml) | The `personaplex-mlx` conda environment that everything runs in |
+| [`nvidia/personaplex-7b-v1`](https://huggingface.co/nvidia/personaplex-7b-v1) on Hugging Face | NVIDIA's model weights, the voice prompts, and the web page itself. They download on first use and are cached in `~/.cache/huggingface`. |
+| The browser page | Where you paste the persona into **Text Prompt**, pick **Voice** `NATURAL_M0`, click **Connect**, and talk. The page's own Text Prompt box takes precedence over `serve.py`'s `--text-prompt`, which is why you paste the persona. |
+| [example3](../example3) | The live setup this example builds on. Its chef persona is the generic baseline in the comparison below. |
 
 ## Running
 
